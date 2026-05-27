@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.alert;
 
+import edu.cit.dasig_core.features.alert.service.KpiEvaluationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;

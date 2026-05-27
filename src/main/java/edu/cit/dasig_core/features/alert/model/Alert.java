@@ -1,4 +1,4 @@
-package edu.cit.dasig_core.features.alert;
+package edu.cit.dasig_core.features.alert.model;
 
 import jakarta.persistence.*;
 

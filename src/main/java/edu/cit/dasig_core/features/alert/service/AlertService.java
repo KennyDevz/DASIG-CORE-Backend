@@ -1,5 +1,7 @@
-package edu.cit.dasig_core.features.alert;
+package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.features.alert.model.Alert;
+import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
