@@ -1,4 +1,4 @@
-package edu.cit.dasig_core.features.alert;
+package edu.cit.dasig_core.features.alert.dto;
 
 import java.time.LocalDateTime;
 

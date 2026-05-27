@@ -1,7 +1,9 @@
-package edu.cit.dasig_core.features.alert;
+package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.features.alert.KpiSubmittedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
 
 import java.math.BigDecimal;
 
