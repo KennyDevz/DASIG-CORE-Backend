@@ -18,4 +18,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     
     // Used by our AdminSeederConfig to check if the primary DASIG_ADMIN already exists
     Optional<User> findByRole(String role);
+
+    Optional<User> findByEmail(String email);
 }
