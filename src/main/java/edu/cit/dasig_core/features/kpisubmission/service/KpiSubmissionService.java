@@ -57,6 +57,36 @@ public class KpiSubmissionService {
         return kpiAssignmentService.getAssignedKpis(user.getOrganizationId());
     }
 
+    @Transactional(readOnly = true)
+    public List<KpiSubmissionResponse> getSubmissionsForCurrentUser(
+            Long kpiDefinitionId,
+            String reportingPeriod,
+            SubmissionType submissionType
+    ) {
+        User user = resolveCurrentUser();
+        validateSubmitterRole(user);
+
+        return kpiSubmissionRepository
+                .findByKpiDefinitionOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId())
+                .stream()
+                .filter(submission -> matchesRoleVisibility(user, submission))
+                .filter(submission -> kpiDefinitionId == null
+                        || submission.getKpiDefinition().getId().equals(kpiDefinitionId))
+                .filter(submission -> reportingPeriod == null
+                        || submission.getReportingPeriod().equalsIgnoreCase(reportingPeriod))
+                .filter(submission -> submissionType == null
+                        || submission.getSubmissionType() == submissionType)
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private boolean matchesRoleVisibility(User user, KpiSubmission submission) {
+        if ("STAFF".equals(user.getRole())) {
+            return submission.getSubmissionType() == SubmissionType.INTERNAL;
+        }
+        return true;
+    }
+
     @Transactional
     public KpiSubmissionResponse createSubmission(CreateKpiSubmissionRequest request, List<MultipartFile> files) {
         User user = resolveCurrentUser();
