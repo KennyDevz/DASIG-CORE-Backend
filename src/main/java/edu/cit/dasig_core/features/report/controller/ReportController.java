@@ -4,6 +4,8 @@ import edu.cit.dasig_core.features.report.dto.GenerateReportRequest;
 import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.service.ReportService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -44,11 +46,10 @@ public class ReportController {
 
     @GetMapping("/{id}/export")
     public ResponseEntity<byte[]> export(@PathVariable Long id) {
-        ReportResponse report = reportService.getReport(id);
-        byte[] content = report.getNarrativeText().getBytes(StandardCharsets.UTF_8);
+        byte[] pdf = reportService.exportAsPdf(id);
         return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=report-" + id + ".txt")
-                .header("Content-Type", "text/plain")
-                .body(content);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=report-" + id + ".pdf")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }

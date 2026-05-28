@@ -1,5 +1,10 @@
 package edu.cit.dasig_core.features.report.service;
 
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Element;
+import com.itextpdf.text.Font;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfWriter;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.report.client.LLMApiClient;
@@ -7,6 +12,7 @@ import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.model.Report;
 import edu.cit.dasig_core.features.report.repository.ReportRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.tomcat.util.http.fileupload.ByteArrayOutputStream;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -96,6 +102,50 @@ public class ReportService {
     public List<ReportResponse> getReportsByOrganization(Long organizationId) {
         return reportRepository.findByOrganizationIdOrderByGeneratedAtDesc(organizationId)
                 .stream().map(this::mapToResponse).toList();
+    }
+
+    public byte[] exportAsPdf(Long reportId) {
+        Report report = reportRepository.findById(reportId)
+                .orElseThrow(() -> new IllegalArgumentException("Report not found with ID: " + reportId));
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            Document document = new Document();
+            PdfWriter.getInstance(document, baos);
+            document.open();
+
+            Font titleFont = new Font(Font.FontFamily.HELVETICA, 16, Font.BOLD);
+            Paragraph title = new Paragraph("Performance Report", titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            title.setSpacingAfter(10);
+            document.add(title);
+
+            Font subFont = new Font(Font.FontFamily.HELVETICA, 11, Font.NORMAL);
+            Paragraph period = new Paragraph(
+                    "Period: " + report.getPeriodFrom() + " to " + report.getPeriodTo(), subFont
+            );
+            period.setAlignment(Element.ALIGN_CENTER);
+            period.setSpacingAfter(20);
+            document.add(period);
+
+            Font bodyFont = new Font(Font.FontFamily.HELVETICA, 11, Font.NORMAL);
+            String cleanText = report.getNarrativeText()
+                    .replace("**", "")
+                    .replace("###", "")
+                    .replace("##", "")
+                    .replace("#", "");
+
+            for (String line : cleanText.split("\n")) {
+                Paragraph para = new Paragraph(line.trim(), bodyFont);
+                para.setSpacingAfter(4);
+                document.add(para);
+            }
+
+            document.close();
+            return baos.toByteArray();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PDF: " + e.getMessage());
+        }
     }
 
     private ReportResponse mapToResponse(Report report) {
