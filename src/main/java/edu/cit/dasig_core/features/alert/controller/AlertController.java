@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/alerts")
-@PreAuthorize("hasAnyRole('DASIG_ADMIN', 'TBI_MANAGER')")
+@PreAuthorize("hasRole('DASIG_ADMIN')")
 @RequiredArgsConstructor
 public class AlertController {
 
