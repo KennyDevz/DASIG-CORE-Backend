@@ -14,7 +14,9 @@ import edu.cit.dasig_core.features.user.dto.UserResponse;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -109,5 +111,18 @@ public class UserService {
         response.setStatus(user.getStatus());
         response.setOrganizationId(user.getOrganizationId());
         return response;
+    }
+
+    public List<UserResponse> getAllUsers() {
+    return userRepository.findAll()
+            .stream()
+            .map(this::mapToResponse)
+            .collect(Collectors.toList());
+    }
+ 
+    public UserResponse getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
+        return mapToResponse(user);
     }
 }
