@@ -15,6 +15,8 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
 
     List<KpiSubmission> findByKpiDefinitionOrganizationId(Long organizationId);
 
+    List<KpiSubmission> findByKpiDefinitionOrganizationIdOrderByDateCreatedDesc(Long organizationId);
+
     boolean existsByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
             Long kpiDefinitionId,
             String reportingPeriod,
@@ -26,4 +28,6 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
             String reportingPeriod,
             SubmissionType submissionType
     );
+
+    Optional<KpiSubmission> findFirstByKpiDefinitionIdOrderByDateCreatedDesc(Long kpiDefinitionId);
 }
