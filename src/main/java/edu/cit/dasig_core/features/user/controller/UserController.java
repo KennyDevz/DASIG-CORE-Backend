@@ -11,6 +11,8 @@ import edu.cit.dasig_core.features.user.dto.UpdateUserRequest;
 import edu.cit.dasig_core.features.user.dto.UserResponse;
 import edu.cit.dasig_core.features.user.service.UserService;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/users")
 @PreAuthorize("hasRole('DASIG_ADMIN')")
@@ -22,6 +24,18 @@ public class UserController {
         this.userService = userService;
     }
 
+    @GetMapping
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        List<UserResponse> responses = userService.getAllUsers();
+        return ResponseEntity.ok(responses);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
+        UserResponse response = userService.getUserById(id);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserResponse response = userService.registerUser(request);
@@ -30,7 +44,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
-            @PathVariable Long id, 
+            @PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest request) {
         UserResponse response = userService.modifyUser(id, request);
         return ResponseEntity.ok(response);
