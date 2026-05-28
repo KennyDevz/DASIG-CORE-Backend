@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.alert.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -11,10 +12,8 @@ public class Alert {
     private Long id;
     private Long submissionId;
     private String status;
-    private LocalDateTime dateDetected;
 
-    @PrePersist
-    protected void onCreate() {
-        this.dateDetected = LocalDateTime.now();
-    }
+    @CreationTimestamp
+    @Column(name = "detected_at", nullable = false, updatable = false)
+    private LocalDateTime dateCreated;
 }
