@@ -1,10 +1,13 @@
 package edu.cit.dasig_core.features.alert.dto;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
-public class AlertResponseDTO {
+@Data
+public class AlertResponse {
     private Long id;
     private Long submissionId;
     private String status;
-    private LocalDateTime dateDetected;
+    private LocalDateTime detectedAt;
 }

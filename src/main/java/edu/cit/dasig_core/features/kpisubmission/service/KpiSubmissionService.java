@@ -1,6 +1,6 @@
 package edu.cit.dasig_core.features.kpisubmission.service;
 
-import edu.cit.dasig_core.features.alert.KpiSubmittedEvent;
+import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
