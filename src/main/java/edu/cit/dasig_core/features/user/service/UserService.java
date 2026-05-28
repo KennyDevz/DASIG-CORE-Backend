@@ -1,5 +1,9 @@
 package edu.cit.dasig_core.features.user.service;
 
+import edu.cit.dasig_core.core.event.UserCreatedEvent;
+import edu.cit.dasig_core.core.smtp.EmailService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,16 +17,12 @@ import edu.cit.dasig_core.features.user.repository.UserRepository;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class UserService {
     
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-
-    // Constructor Injection (Best practice for Spring dependencies)
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public UserResponse registerUser(CreateUserRequest request) {
@@ -49,8 +49,7 @@ public class UserService {
         // 5. Save to database
         User savedUser = userRepository.save(user);
 
-        // TODO: Integrate EmailService here to send `tempPassword` to `savedUser.getEmail()`
-
+        eventPublisher.publishEvent(new UserCreatedEvent(savedUser.getEmail(), savedUser.getName(), tempPassword));
         return mapToResponse(savedUser);
     }
 

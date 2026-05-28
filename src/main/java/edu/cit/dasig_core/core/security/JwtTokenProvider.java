@@ -36,6 +36,7 @@ public class JwtTokenProvider {
                 .subject(userPrincipal.getUsername())  // new fluent API
                 .issuedAt(now)
                 .expiration(expiryDate)
+                .claim("role", userPrincipal.getAuthorities().iterator().next().getAuthority())
                 .signWith(getSigningKey())             // key only, algo inferred
                 .compact();
     }
