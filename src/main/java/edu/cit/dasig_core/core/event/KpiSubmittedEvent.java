@@ -1,6 +1,5 @@
-package edu.cit.dasig_core.features.alert;
+package edu.cit.dasig_core.core.event;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -9,6 +8,6 @@ import java.math.BigDecimal;
 @Getter
 @RequiredArgsConstructor
 public class KpiSubmittedEvent {
-    private final Long submission;
-    private final BigDecimal value;
+    private final Long submissionId;
+    private final BigDecimal submittedValue;
 }
