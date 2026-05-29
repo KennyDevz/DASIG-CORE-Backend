@@ -145,6 +145,8 @@ public class KpiSubmissionService {
         response.setId(submission.getId());
         response.setKpiDefinitionId(submission.getKpiDefinition().getId());
         response.setKpiName(submission.getKpiDefinition().getName());
+        response.setSubmittedByName(submission.getSubmittedBy().getName());
+        response.setSubmittedByRole(submission.getSubmittedBy().getRole());
         response.setReportingPeriod(submission.getReportingPeriod());
         response.setSubmittedValue(submission.getSubmittedValue());
         response.setSubmissionDate(submission.getSubmissionDate());
