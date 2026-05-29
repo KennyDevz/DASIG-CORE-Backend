@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class ReportResponse {
-    private Long id;
+    private String id;
     private Long organizationId;
     private LocalDate periodFrom;
     private LocalDate periodTo;
