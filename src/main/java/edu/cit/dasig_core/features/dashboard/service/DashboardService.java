@@ -12,7 +12,8 @@ import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
-import edu.cit.dasig_core.features.kpisubmission.util.KpiAchievementCalculator;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator.KpiPeriodProgress;
 import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
@@ -185,31 +186,28 @@ public class DashboardService {
                         LocalDate.now()
                 );
 
-        KpiSubmission latestSubmission = reportingPeriod != null
-                ? kpiSubmissionRepository
-                        .findByKpiDefinitionIdAndOrganizationIdAndReportingPeriodAndSubmissionType(
-                                kpiDefinition.getId(),
-                                kpiDefinition.getOrganization().getId(),
-                                reportingPeriod,
-                                submissionType
-                        )
-                        .orElse(null)
+        List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
+                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+                        kpiDefinition.getId(),
+                        kpiDefinition.getOrganization().getId(),
+                        submissionType
+                );
+        KpiPeriodProgress progress = reportingPeriod != null
+                ? KpiPeriodProgressCalculator.calculateExisting(kpiDefinition, reportingPeriod, relatedSubmissions)
                 : null;
 
-        double submittedValue = latestSubmission != null ? latestSubmission.getSubmittedValue() : 0.0;
-        double achievementRate = latestSubmission != null
-                ? latestSubmission.getAchievementRate()
-                : KpiAchievementCalculator.calculate(submittedValue, kpiDefinition.getTargetValue());
-
-        String performanceStatus = latestSubmission != null
-                ? latestSubmission.getPerformanceStatus()
-                : PerformanceStatusClassifier.classify(achievementRate, kpiDefinition.getThreshold());
+        double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
+        double targetValue = progress != null ? progress.expectedTarget() : kpiDefinition.getTargetValue();
+        double achievementRate = progress != null ? progress.achievementRate() : 0.0;
+        String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.RED;
 
         DashboardKpiItemResponse item = new DashboardKpiItemResponse();
         item.setId(kpiDefinition.getId());
         item.setName(kpiDefinition.getName());
         item.setDescription(kpiDefinition.getDescription());
-        item.setTargetValue(kpiDefinition.getTargetValue());
+        item.setTargetValue(targetValue);
+        item.setOverallTargetValue(kpiDefinition.getTargetValue());
+        item.setPeriodTargetValue(targetValue);
         item.setSubmittedValue(submittedValue);
         item.setUnit(kpiDefinition.getUnit());
         item.setDeadline(kpiDefinition.getDeadline());
