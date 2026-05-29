@@ -10,12 +10,15 @@ import edu.cit.dasig_core.features.notification.repository.NotificationRepositor
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -25,6 +28,13 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final UserRepository userRepository;
+
+    @Value("${app.business-timezone:Asia/Manila}")
+    private String businessTimezone;
+
+    private LocalDate today() {
+        return LocalDate.now(ZoneId.of(businessTimezone));
+    }
 
     @Transactional(readOnly = true)
     public List<NotificationResponse> getAllNotifications() {
@@ -72,28 +82,58 @@ public class NotificationService {
     }
 
     @Transactional
-    public void createDeadlineNotificationsIfDue() {
-        LocalDate today = LocalDate.now();
-        createNotificationsForType(NotificationType.SEVEN_DAYS_BEFORE, today.plusDays(7));
-        createNotificationsForType(NotificationType.TWO_DAYS_BEFORE, today.plusDays(2));
+    public void createDeadlineNotificationsForKpi(KpiDefinition kpi) {
+        if (kpi == null || kpi.getId() == null || kpi.getDeadline() == null) {
+            return;
+        }
+
+        long daysUntil = ChronoUnit.DAYS.between(today(), kpi.getDeadline());
+        if (daysUntil == 7) {
+            createNotificationIfAbsent(kpi, NotificationType.SEVEN_DAYS_BEFORE);
+        } else if (daysUntil == 2) {
+            createNotificationIfAbsent(kpi, NotificationType.TWO_DAYS_BEFORE);
+        }
     }
 
-    private void createNotificationsForType(NotificationType type, LocalDate targetDeadline) {
-        List<KpiDefinition> kpis = kpiDefinitionRepository.findByDeadline(targetDeadline);
+    @Transactional
+    public void createDeadlineNotificationsIfDue() {
+        LocalDate today = today();
+        List<KpiDefinition> kpis = kpiDefinitionRepository.findAll();
 
         for (KpiDefinition kpi : kpis) {
-            if (notificationRepository.existsByKpiDefinitionIdAndNotificationType(kpi.getId(), type)) {
+            if (kpi.getDeadline() == null) {
                 continue;
             }
 
-            Notification notification = new Notification();
-            notification.setKpiDefinitionId(kpi.getId());
-            notification.setOrganizationId(kpi.getOrganization().getId());
-            notification.setNotificationType(type);
-            notification.setStatus(Notification.STATUS_UNREAD);
-            notification.setMessage(buildMessage(kpi, type));
-            notificationRepository.save(notification);
+            long daysUntil = ChronoUnit.DAYS.between(today, kpi.getDeadline());
+            if (daysUntil == 7) {
+                createNotificationIfAbsent(kpi, NotificationType.SEVEN_DAYS_BEFORE);
+            } else if (daysUntil == 2) {
+                createNotificationIfAbsent(kpi, NotificationType.TWO_DAYS_BEFORE);
+            }
         }
+    }
+
+    private void createNotificationIfAbsent(KpiDefinition kpi, NotificationType type) {
+        if (notificationRepository.existsByKpiDefinitionIdAndNotificationType(kpi.getId(), type)) {
+            return;
+        }
+
+        Long organizationId = kpi.getOrganization() != null
+                ? kpi.getOrganization().getId()
+                : null;
+        if (organizationId == null) {
+            throw new IllegalStateException(
+                    "KPI " + kpi.getId() + " has no organization; cannot create notification.");
+        }
+
+        Notification notification = new Notification();
+        notification.setKpiDefinitionId(kpi.getId());
+        notification.setOrganizationId(organizationId);
+        notification.setNotificationType(type);
+        notification.setStatus(Notification.STATUS_UNREAD);
+        notification.setMessage(buildMessage(kpi, type));
+        notificationRepository.save(notification);
     }
 
     private String buildMessage(KpiDefinition kpi, NotificationType type) {
