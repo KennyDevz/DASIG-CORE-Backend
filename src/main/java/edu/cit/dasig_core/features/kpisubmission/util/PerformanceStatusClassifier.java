@@ -24,4 +24,17 @@ public final class PerformanceStatusClassifier {
         }
         return RED;
     }
+
+    /**
+     * Classifies cumulative period performance using raw target and threshold values.
+     */
+    public static String classify(double cumulativeSubmittedValue, double expectedTarget, double expectedThreshold) {
+        if (cumulativeSubmittedValue >= expectedTarget) {
+            return GREEN;
+        }
+        if (cumulativeSubmittedValue >= expectedThreshold) {
+            return YELLOW;
+        }
+        return RED;
+    }
 }

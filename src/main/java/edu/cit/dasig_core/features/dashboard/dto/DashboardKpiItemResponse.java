@@ -11,6 +11,8 @@ public class DashboardKpiItemResponse {
     private String name;
     private String description;
     private Double targetValue;
+    private Double overallTargetValue;
+    private Double periodTargetValue;
     private Double submittedValue;
     private String unit;
     private LocalDate deadline;
