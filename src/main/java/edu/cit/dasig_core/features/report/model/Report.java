@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.GenericGenerator;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,8 +18,13 @@ import java.time.LocalDateTime;
 public class Report {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GenericGenerator(
+            name = "custom_report_id",
+            strategy = "edu.cit.dasig_core.features.report.config.CustomIdGenerator" // 2. Tells Hibernate where your Java generator is
+    )
+    @GeneratedValue(generator = "custom_report_id")
+    @Column(name = "id", length = 20) // 3. Changed from Long to String to accept text like "PR-2026-0001"
+    private String id;
 
     @Column(name = "organization_id", nullable = false)
     private Long organizationId;

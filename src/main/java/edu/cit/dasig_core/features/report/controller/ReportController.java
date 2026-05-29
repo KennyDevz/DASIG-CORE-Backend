@@ -35,7 +35,7 @@ public class ReportController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ReportResponse> getReport(@PathVariable Long id) {
+    public ResponseEntity<ReportResponse> getReport(@PathVariable String id) {
         return ResponseEntity.ok(reportService.getReport(id));
     }
 
@@ -45,7 +45,7 @@ public class ReportController {
     }
 
     @GetMapping("/{id}/export")
-    public ResponseEntity<byte[]> export(@PathVariable Long id) {
+    public ResponseEntity<byte[]> export(@PathVariable String id) {
         byte[] pdf = reportService.exportAsPdf(id);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=report-" + id + ".pdf")

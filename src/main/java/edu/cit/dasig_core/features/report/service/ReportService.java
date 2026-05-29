@@ -1,10 +1,9 @@
 package edu.cit.dasig_core.features.report.service;
 
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Element;
-import com.itextpdf.text.Font;
-import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.PdfWriter;
+import com.itextpdf.text.pdf.draw.LineSeparator;
+import java.time.format.DateTimeFormatter;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
@@ -13,7 +12,7 @@ import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.model.Report;
 import edu.cit.dasig_core.features.report.repository.ReportRepository;
 import lombok.RequiredArgsConstructor;
-import org.apache.tomcat.util.http.fileupload.ByteArrayOutputStream;
+import java.io.ByteArrayOutputStream;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -95,7 +94,7 @@ public class ReportService {
         return mapToResponse(saved);
     }
 
-    public ReportResponse getReport(Long reportId) {
+    public ReportResponse getReport(String reportId) {
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found with ID: " + reportId));
         return mapToResponse(report);
@@ -106,40 +105,97 @@ public class ReportService {
                 .stream().map(this::mapToResponse).toList();
     }
 
-    public byte[] exportAsPdf(Long reportId) {
+    public byte[] exportAsPdf(String reportId) {
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found with ID: " + reportId));
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            Document document = new Document();
+            Document document = new Document(PageSize.A4, 50, 50, 60, 60);
             PdfWriter.getInstance(document, baos);
             document.open();
 
-            Font titleFont = new Font(Font.FontFamily.HELVETICA, 16, Font.BOLD);
+            // Fonts
+            Font titleFont   = new Font(Font.FontFamily.HELVETICA, 18, Font.BOLD);
+            Font headerFont  = new Font(Font.FontFamily.HELVETICA, 13, Font.BOLD);
+            Font labelFont   = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD);
+            Font bodyFont    = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
+            Font bulletFont  = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
+
+            // Title
             Paragraph title = new Paragraph("Performance Report", titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
-            title.setSpacingAfter(10);
+            title.setSpacingAfter(6);
             document.add(title);
 
-            Font subFont = new Font(Font.FontFamily.HELVETICA, 11, Font.NORMAL);
-            Paragraph period = new Paragraph(
-                    "Period: " + report.getPeriodFrom() + " to " + report.getPeriodTo(), subFont
-            );
+            // Report ID
+            Paragraph idParagraph = new Paragraph("Report No.: " + report.getId(), labelFont);
+            idParagraph.setAlignment(Element.ALIGN_CENTER);
+            idParagraph.setSpacingAfter(6);
+            document.add(idParagraph);
+
+            // Readable date format
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMMM dd, yyyy");
+            String from = report.getPeriodFrom().format(formatter);
+            String to   = report.getPeriodTo().format(formatter);
+
+            Paragraph period = new Paragraph("Reporting Period: " + from + " — " + to, labelFont);
             period.setAlignment(Element.ALIGN_CENTER);
-            period.setSpacingAfter(20);
+            period.setSpacingAfter(6);
             document.add(period);
 
-            Font bodyFont = new Font(Font.FontFamily.HELVETICA, 11, Font.NORMAL);
-            String cleanText = report.getNarrativeText()
-                    .replace("**", "")
-                    .replace("###", "")
-                    .replace("##", "")
-                    .replace("#", "");
+            // Generated date
+            DateTimeFormatter dtFormatter = DateTimeFormatter.ofPattern("MMMM dd, yyyy hh:mm a");
+            Paragraph generated = new Paragraph("Generated: " + report.getGeneratedAt().format(dtFormatter), bodyFont);
+            generated.setAlignment(Element.ALIGN_CENTER);
+            generated.setSpacingAfter(20);
+            document.add(generated);
 
-            for (String line : cleanText.split("\n")) {
-                Paragraph para = new Paragraph(line.trim(), bodyFont);
-                para.setSpacingAfter(4);
-                document.add(para);
+            // Divider
+            LineSeparator separator = new LineSeparator();
+            separator.setLineColor(new BaseColor(200, 200, 200));
+            document.add(new Chunk(separator));
+            document.add(Chunk.NEWLINE);
+
+            // Parse and render narrative
+            String[] lines = report.getNarrativeText().split("\n");
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    document.add(Chunk.NEWLINE);
+                } else if (trimmed.startsWith("### ") || trimmed.startsWith("## ") || trimmed.startsWith("# ")) {
+                    // Section headers
+                    String headerText = trimmed.replaceAll("^#{1,3}\\s*", "").replace("**", "");
+                    Paragraph header = new Paragraph(headerText, headerFont);
+                    header.setSpacingBefore(14);
+                    header.setSpacingAfter(6);
+                    document.add(header);
+                } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+                    // Bullet points
+                    String bulletText = trimmed.substring(2).replace("**", "");
+                    Paragraph bullet = new Paragraph("• " + bulletText, bulletFont);
+                    bullet.setIndentationLeft(16);
+                    bullet.setSpacingAfter(4);
+                    document.add(bullet);
+                } else if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
+                    // Bold standalone lines
+                    String boldText = trimmed.replace("**", "");
+                    Paragraph bold = new Paragraph(boldText, labelFont);
+                    bold.setSpacingAfter(4);
+                    document.add(bold);
+                } else {
+                    // Regular paragraph — handle inline **bold**
+                    Paragraph para = new Paragraph();
+                    para.setSpacingAfter(4);
+                    String[] parts = trimmed.split("\\*\\*");
+                    for (int i = 0; i < parts.length; i++) {
+                        if (i % 2 == 1) {
+                            para.add(new Chunk(parts[i], labelFont)); // bold
+                        } else {
+                            para.add(new Chunk(parts[i], bodyFont));  // normal
+                        }
+                    }
+                    document.add(para);
+                }
             }
 
             document.close();
