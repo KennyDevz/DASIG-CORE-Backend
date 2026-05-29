@@ -71,7 +71,7 @@ public class KpiSubmissionService {
         return kpiSubmissionRepository
                 .findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId())
                 .stream()
-                .filter(submission -> matchesRoleVisibility(user, submission))
+                .filter(submission -> matchesRoleVisibility(user, submission, submissionType))
                 .filter(submission -> kpiDefinitionId == null
                         || submission.getKpiDefinition().getId().equals(kpiDefinitionId))
                 .filter(submission -> reportingPeriod == null
@@ -82,9 +82,11 @@ public class KpiSubmissionService {
                 .toList();
     }
 
-    private boolean matchesRoleVisibility(User user, KpiSubmission submission) {
+    private boolean matchesRoleVisibility(User user, KpiSubmission submission, SubmissionType requestedSubmissionType) {
         if ("STAFF".equals(user.getRole())) {
-            return submission.getSubmissionType() == SubmissionType.INTERNAL;
+            return requestedSubmissionType == SubmissionType.FINAL
+                    ? submission.getSubmissionType() == SubmissionType.FINAL
+                    : submission.getSubmissionType() == SubmissionType.INTERNAL;
         }
         return true;
     }
@@ -163,6 +165,31 @@ public class KpiSubmissionService {
         return toResponse(savedSubmission);
     }
 
+    @Transactional(readOnly = true)
+    public SubmissionDocumentDownload getDocumentForCurrentUser(Long documentId) {
+        User user = resolveCurrentUser();
+        validateSubmitterRole(user);
+
+        SubmissionDocument document = submissionDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission document not found."));
+        KpiSubmission submission = document.getSubmission();
+
+        if (!user.getOrganizationId().equals(submission.getOrganization().getId())) {
+            throw new IllegalArgumentException("You do not have access to this document.");
+        }
+
+        if ("STAFF".equals(user.getRole()) && submission.getSubmissionType() != SubmissionType.INTERNAL) {
+            throw new IllegalArgumentException("You do not have access to this document.");
+        }
+
+        byte[] content = submissionDocumentService.downloadDocument(document);
+        return new SubmissionDocumentDownload(
+                document.getFileName(),
+                document.getContentType(),
+                content
+        );
+    }
+
     private KpiSubmissionResponse toResponse(KpiSubmission submission) {
         KpiSubmissionResponse response = new KpiSubmissionResponse();
         response.setId(submission.getId());
@@ -227,5 +254,12 @@ public class KpiSubmissionService {
             return SubmissionType.INTERNAL;
         }
         return SubmissionType.FINAL;
+    }
+
+    public record SubmissionDocumentDownload(
+            String fileName,
+            String contentType,
+            byte[] content
+    ) {
     }
 }
