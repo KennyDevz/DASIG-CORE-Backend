@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.report.controller;
 
-import edu.cit.dasig_core.features.report.dto.GenerateReportRequest;
+import edu.cit.dasig_core.features.report.dto.GenerateKpiReportRequest;
+import edu.cit.dasig_core.features.report.dto.GenerateOrgReportRequest;
 import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.service.ReportService;
 import jakarta.validation.Valid;
@@ -10,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -24,10 +24,20 @@ public class ReportController {
         this.reportService = reportService;
     }
 
-    @PostMapping("/generate")
-    public ResponseEntity<ReportResponse> generate(@Valid @RequestBody GenerateReportRequest request) {
-        ReportResponse response = reportService.generateReport(
+    @PostMapping("/generate/organization")
+    public ResponseEntity<ReportResponse> generateByOrganization(@Valid @RequestBody GenerateOrgReportRequest request) {
+        ReportResponse response = reportService.generateOrganizationReport(
                 request.getOrganizationId(),
+                request.getPeriodFrom(),
+                request.getPeriodTo()
+        );
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/generate/kpi")
+    public ResponseEntity<ReportResponse> generateByKpi(@Valid @RequestBody GenerateKpiReportRequest request) {
+        ReportResponse response = reportService.generateKpiReport(
+                request.getKpiDefinitionId(),
                 request.getPeriodFrom(),
                 request.getPeriodTo()
         );

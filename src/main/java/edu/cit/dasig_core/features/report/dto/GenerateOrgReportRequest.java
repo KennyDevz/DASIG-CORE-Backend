@@ -6,7 +6,7 @@ import lombok.Data;
 import java.time.LocalDate;
 
 @Data
-public class GenerateReportRequest {
+public class GenerateOrgReportRequest {
 
     @NotNull(message = "Organization ID is required")
     private Long organizationId;
