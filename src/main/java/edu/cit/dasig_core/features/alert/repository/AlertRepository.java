@@ -20,7 +20,7 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
             SELECT a FROM Alert a
             WHERE a.submissionId IN (
                 SELECT s.id FROM KpiSubmission s
-                WHERE s.kpiDefinition.organization.id = :organizationId
+                WHERE s.organization.id = :organizationId
             )
             ORDER BY a.detectedAt DESC
             """)

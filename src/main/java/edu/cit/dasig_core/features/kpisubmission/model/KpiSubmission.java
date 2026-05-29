@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.kpisubmission.model;
 
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
+import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.user.model.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -17,7 +18,7 @@ import java.time.LocalDateTime;
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "uk_kpi_submission_period_type",
-                        columnNames = {"kpi_definition_id", "reporting_period", "submission_type"}
+                        columnNames = {"organization_id", "kpi_definition_id", "reporting_period", "submission_type"}
                 )
         }
 )
@@ -33,6 +34,10 @@ public class KpiSubmission {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "kpi_definition_id", nullable = false)
     private KpiDefinition kpiDefinition;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "organization_id", nullable = false, updatable = false)
+    private Organization organization;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "submitted_by_id", nullable = false)

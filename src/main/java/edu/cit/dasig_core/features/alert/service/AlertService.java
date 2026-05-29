@@ -92,7 +92,7 @@ public class AlertService {
             return;
         }
 
-        Long organizationId = submission.getKpiDefinition().getOrganization().getId();
+        Long organizationId = submission.getOrganization().getId();
         if (user.getOrganizationId() == null || !user.getOrganizationId().equals(organizationId)) {
             throw new IllegalArgumentException("You do not have access to this alert.");
         }
@@ -143,8 +143,8 @@ public class AlertService {
 
         response.setKpiDefinitionId(submission.getKpiDefinition().getId());
         response.setKpiName(submission.getKpiDefinition().getName());
-        response.setOrganizationId(submission.getKpiDefinition().getOrganization().getId());
-        response.setOrganizationName(submission.getKpiDefinition().getOrganization().getName());
+        response.setOrganizationId(submission.getOrganization().getId());
+        response.setOrganizationName(submission.getOrganization().getName());
 
         response.setReportingPeriod(submission.getReportingPeriod());
         response.setSubmittedValue(submission.getSubmittedValue());
