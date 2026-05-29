@@ -36,6 +36,7 @@ public class KpiDefinitionService {
         kpiDef.setUnit(request.getUnit());
         kpiDef.setDeadline(request.getDeadline());
         kpiDef.setThreshold(request.getThreshold());
+        kpiDef.setReportingFrequency(request.getReportingFrequency());
         kpiDef.setOrganization(org);
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.save(kpiDef);
@@ -53,6 +54,7 @@ public class KpiDefinitionService {
         kpiDef.setUnit(request.getUnit());
         kpiDef.setDeadline(request.getDeadline());
         kpiDef.setThreshold(request.getThreshold());
+        kpiDef.setReportingFrequency(request.getReportingFrequency());
 
         KpiDefinition updatedKpiDef = kpiDefinitionRepository.save(kpiDef);
         return mapToResponse(updatedKpiDef);
@@ -97,6 +99,7 @@ public class KpiDefinitionService {
         response.setThreshold(kpiDef.getThreshold());
         response.setOrganizationId(kpiDef.getOrganization().getId());
         response.setOrganizationName(kpiDef.getOrganization().getName());
+        response.setReportingFrequency(kpiDef.getReportingFrequency());
         return response;
     }
 }

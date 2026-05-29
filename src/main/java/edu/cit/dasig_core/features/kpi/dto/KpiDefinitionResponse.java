@@ -1,6 +1,8 @@
 package edu.cit.dasig_core.features.kpi.dto;
 
+import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import lombok.Data;
+
 import java.time.LocalDate;
 
 @Data
@@ -14,4 +16,5 @@ public class KpiDefinitionResponse {
     private Double threshold;
     private Long organizationId;
     private String organizationName;
+    private ReportingFrequency reportingFrequency;
 }
