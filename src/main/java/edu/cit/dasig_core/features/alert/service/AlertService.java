@@ -5,7 +5,9 @@ import edu.cit.dasig_core.features.alert.dto.AlertResponse;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -147,6 +149,28 @@ public class AlertService {
         response.setOrganizationName(submission.getOrganization().getName());
 
         response.setReportingPeriod(submission.getReportingPeriod());
+
+        // 2. Fetch history for this specific KPI to calculate cumulative state
+        List<KpiSubmission> kpiHistory = kpiSubmissionRepository
+                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+                        submission.getKpiDefinition().getId(),
+                        submission.getOrganization().getId(),
+                        SubmissionType.FINAL
+                );
+
+        // 3. Run the exact same calculator used in Reports and Dashboards
+        KpiPeriodProgressCalculator.KpiPeriodProgress progress =
+                KpiPeriodProgressCalculator.calculateExisting(
+                        submission.getKpiDefinition(),
+                        submission.getReportingPeriod(),
+                        kpiHistory
+                );
+
+        // 4. Map the new detailed context fields
+        response.setPeriodContribution(submission.getSubmittedValue());
+        response.setCumulativeValue(progress.cumulativeSubmittedValue());
+        response.setScaledPeriodTarget(progress.expectedTarget());
+
         response.setSubmittedValue(submission.getSubmittedValue());
         response.setSubmissionDate(submission.getSubmissionDate());
         response.setAchievementRate(submission.getAchievementRate());
