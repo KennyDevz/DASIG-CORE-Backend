@@ -6,6 +6,7 @@ import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.util.KpiAchievementCalculator;
 import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
@@ -37,7 +38,7 @@ public class DashboardService {
         response.setRole(user.getRole());
         response.setOrganizationId(user.getOrganizationId());
         response.setOrganizationName(resolveOrganizationName(user));
-        response.setKpis(visibleKpis.stream().map(this::toDashboardKpiItem).toList());
+        response.setKpis(visibleKpis.stream().map(kpi -> toDashboardKpiItem(kpi, user)).toList());
 
         return response;
     }
@@ -54,9 +55,13 @@ public class DashboardService {
         return kpiDefinitionRepository.findByOrganizationId(user.getOrganizationId());
     }
 
-    private DashboardKpiItemResponse toDashboardKpiItem(KpiDefinition kpiDefinition) {
+    private DashboardKpiItemResponse toDashboardKpiItem(KpiDefinition kpiDefinition, User user) {
+        SubmissionType submissionType = resolveSubmissionTypeForDashboard(user.getRole());
         KpiSubmission latestSubmission = kpiSubmissionRepository
-                .findFirstByKpiDefinitionIdOrderByDateCreatedDesc(kpiDefinition.getId())
+                .findFirstByKpiDefinitionIdAndSubmissionTypeOrderByDateCreatedDesc(
+                        kpiDefinition.getId(),
+                        submissionType
+                )
                 .orElse(null);
 
         double submittedValue = latestSubmission != null ? latestSubmission.getSubmittedValue() : 0.0;
@@ -80,6 +85,13 @@ public class DashboardService {
         item.setAchievementRate(achievementRate);
         item.setStatus(mapStatus(performanceStatus));
         return item;
+    }
+
+    private SubmissionType resolveSubmissionTypeForDashboard(String role) {
+        if ("DASIG_ADMIN".equals(role)) {
+            return SubmissionType.FINAL;
+        }
+        return SubmissionType.INTERNAL;
     }
 
     private String mapStatus(String performanceStatus) {
