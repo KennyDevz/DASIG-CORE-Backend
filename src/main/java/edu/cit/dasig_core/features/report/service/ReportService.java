@@ -6,7 +6,6 @@ import com.itextpdf.text.Font;
 import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.pdf.PdfWriter;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
-import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.report.client.LLMApiClient;
 import edu.cit.dasig_core.features.report.dto.ReportResponse;
@@ -32,9 +31,8 @@ public class ReportService {
         List<KpiSubmission> submissions = submissionRepository
                 .findByKpiDefinitionOrganizationId(organizationId);
 
-        // 2. Filter by period and official (TBI) submissions only
+        // 2. Filter by period
         List<KpiSubmission> filtered = submissions.stream()
-                .filter(s -> s.getSubmissionType() == SubmissionType.FINAL)
                 .filter(s -> {
                     LocalDate d = s.getSubmissionDate();
                     return (d.isEqual(periodFrom) || d.isAfter(periodFrom)) &&

@@ -1,6 +1,5 @@
 package edu.cit.dasig_core.features.dashboard.dto;
 
-import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -17,6 +16,4 @@ public class DashboardKpiItemResponse {
     private String organization;
     private Double achievementRate;
     private String status;
-    private ReportingFrequency reportingFrequency;
-    private String reportingPeriod;
 }

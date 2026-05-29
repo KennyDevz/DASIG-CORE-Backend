@@ -2,7 +2,6 @@ package edu.cit.dasig_core.features.alert.service;
 
 import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
-import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +20,7 @@ public class KpiEvaluationService {
         KpiSubmission submission = kpiSubmissionRepository.findById(event.getSubmissionId())
                 .orElse(null);
 
-        if (submission == null || submission.getSubmissionType() != SubmissionType.FINAL) {
+        if (submission == null) {
             return;
         }
 

@@ -1,6 +1,5 @@
 package edu.cit.dasig_core.features.kpi.dto;
 
-import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -30,7 +29,4 @@ public class CreateKpiDefinitionRequest {
 
     @NotNull(message = "Assigned Organization ID is required")
     private Long organizationId;
-
-    @NotNull(message = "Reporting frequency is required")
-    private ReportingFrequency reportingFrequency;
 }

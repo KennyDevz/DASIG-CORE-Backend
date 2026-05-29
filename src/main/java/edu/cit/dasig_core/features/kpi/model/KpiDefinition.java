@@ -1,7 +1,6 @@
 package edu.cit.dasig_core.features.kpi.model;
 
 import edu.cit.dasig_core.features.organization.model.Organization;
-import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -39,10 +38,6 @@ public class KpiDefinition {
 
     @Column(nullable = false)
     private Double threshold; // Numeric value triggering an alert
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "reporting_frequency", nullable = false)
-    private ReportingFrequency reportingFrequency = ReportingFrequency.QUARTERLY;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "organization_id", nullable = false)

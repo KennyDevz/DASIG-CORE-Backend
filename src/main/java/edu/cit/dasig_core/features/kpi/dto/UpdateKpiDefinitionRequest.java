@@ -1,6 +1,5 @@
 package edu.cit.dasig_core.features.kpi.dto;
 
-import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -27,7 +26,4 @@ public class UpdateKpiDefinitionRequest {
 
     @NotNull(message = "Threshold is required")
     private Double threshold;
-
-    @NotNull(message = "Reporting frequency is required")
-    private ReportingFrequency reportingFrequency;
 }

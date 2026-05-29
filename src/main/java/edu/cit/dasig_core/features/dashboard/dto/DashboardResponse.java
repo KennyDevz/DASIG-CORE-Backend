@@ -9,6 +9,5 @@ public class DashboardResponse {
     private String role;
     private Long organizationId;
     private String organizationName;
-    private String reportingPeriod;
     private List<DashboardKpiItemResponse> kpis;
 }
