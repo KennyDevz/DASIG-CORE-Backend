@@ -74,6 +74,7 @@ public class KpiSubmissionController {
         response.setThreshold(kpiDefinition.getThreshold());
         response.setOrganizationId(kpiDefinition.getOrganization().getId());
         response.setOrganizationName(kpiDefinition.getOrganization().getName());
+        response.setReportingFrequency(kpiDefinition.getReportingFrequency());
         return response;
     }
 }

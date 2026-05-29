@@ -2,6 +2,7 @@ package edu.cit.dasig_core.features.kpisubmission.service;
 
 import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
+import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
 import edu.cit.dasig_core.features.kpisubmission.dto.SubmissionDocumentResponse;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -98,6 +100,18 @@ public class KpiSubmissionService {
         );
 
         SubmissionType submissionType = resolveSubmissionType(user);
+
+        LocalDate assignmentStart = kpiDefinition.getDateCreated() != null
+                ? kpiDefinition.getDateCreated().toLocalDate()
+                : kpiDefinition.getDeadline();
+        if (!ReportingPeriodResolver.isValidPeriod(
+                kpiDefinition.getReportingFrequency(),
+                kpiDefinition.getDeadline(),
+                assignmentStart,
+                request.getReportingPeriod()
+        )) {
+            throw new IllegalArgumentException("Invalid reporting period for this KPI.");
+        }
 
         if (kpiSubmissionRepository.existsByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
                 request.getKpiDefinitionId(),
