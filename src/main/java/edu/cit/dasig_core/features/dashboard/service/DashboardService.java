@@ -82,7 +82,10 @@ public class DashboardService {
         Collections.reverse(orderedPeriods);
 
         Map<String, List<KpiSubmission>> submissionsByPeriod = kpiSubmissionRepository
-                .findByKpiDefinitionId(kpiDefinitionId)
+                .findByKpiDefinitionIdAndOrganizationId(
+                        kpiDefinitionId,
+                        kpiDefinition.getOrganization().getId()
+                )
                 .stream()
                 .filter(submission -> matchesHistoryVisibility(user, submission))
                 .collect(Collectors.groupingBy(KpiSubmission::getReportingPeriod));
@@ -184,8 +187,9 @@ public class DashboardService {
 
         KpiSubmission latestSubmission = reportingPeriod != null
                 ? kpiSubmissionRepository
-                        .findByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
+                        .findByKpiDefinitionIdAndOrganizationIdAndReportingPeriodAndSubmissionType(
                                 kpiDefinition.getId(),
+                                kpiDefinition.getOrganization().getId(),
                                 reportingPeriod,
                                 submissionType
                         )

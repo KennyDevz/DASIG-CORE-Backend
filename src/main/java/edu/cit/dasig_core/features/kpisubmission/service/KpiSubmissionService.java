@@ -69,7 +69,7 @@ public class KpiSubmissionService {
         validateSubmitterRole(user);
 
         return kpiSubmissionRepository
-                .findByKpiDefinitionOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId())
+                .findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId())
                 .stream()
                 .filter(submission -> matchesRoleVisibility(user, submission))
                 .filter(submission -> kpiDefinitionId == null
@@ -113,8 +113,9 @@ public class KpiSubmissionService {
             throw new IllegalArgumentException("Invalid reporting period for this KPI.");
         }
 
-        if (kpiSubmissionRepository.existsByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
+        if (kpiSubmissionRepository.existsByKpiDefinitionIdAndOrganizationIdAndReportingPeriodAndSubmissionType(
                 request.getKpiDefinitionId(),
+                kpiDefinition.getOrganization().getId(),
                 request.getReportingPeriod(),
                 submissionType
         )) {
@@ -133,6 +134,7 @@ public class KpiSubmissionService {
 
         KpiSubmission submission = new KpiSubmission();
         submission.setKpiDefinition(kpiDefinition);
+        submission.setOrganization(kpiDefinition.getOrganization());
         submission.setSubmittedBy(user);
         submission.setSubmittedValue(request.getSubmittedValue());
         submission.setReportingPeriod(request.getReportingPeriod());

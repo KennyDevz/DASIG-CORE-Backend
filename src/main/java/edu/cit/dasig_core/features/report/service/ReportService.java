@@ -30,7 +30,7 @@ public class ReportService {
     public ReportResponse generateReport(Long organizationId, LocalDate periodFrom, LocalDate periodTo) {
         // 1. Fetch submissions for the organization
         List<KpiSubmission> submissions = submissionRepository
-                .findByKpiDefinitionOrganizationId(organizationId);
+                .findByOrganizationId(organizationId);
 
         // 2. Filter by period and official (TBI) submissions only
         List<KpiSubmission> filtered = submissions.stream()

@@ -13,18 +13,22 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
 
     List<KpiSubmission> findByKpiDefinitionId(Long kpiDefinitionId);
 
-    List<KpiSubmission> findByKpiDefinitionOrganizationId(Long organizationId);
+    List<KpiSubmission> findByKpiDefinitionIdAndOrganizationId(Long kpiDefinitionId, Long organizationId);
 
-    List<KpiSubmission> findByKpiDefinitionOrganizationIdOrderByDateCreatedDesc(Long organizationId);
+    List<KpiSubmission> findByOrganizationId(Long organizationId);
 
-    boolean existsByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
+    List<KpiSubmission> findByOrganizationIdOrderByDateCreatedDesc(Long organizationId);
+
+    boolean existsByKpiDefinitionIdAndOrganizationIdAndReportingPeriodAndSubmissionType(
             Long kpiDefinitionId,
+            Long organizationId,
             String reportingPeriod,
             SubmissionType submissionType
     );
 
-    Optional<KpiSubmission> findByKpiDefinitionIdAndReportingPeriodAndSubmissionType(
+    Optional<KpiSubmission> findByKpiDefinitionIdAndOrganizationIdAndReportingPeriodAndSubmissionType(
             Long kpiDefinitionId,
+            Long organizationId,
             String reportingPeriod,
             SubmissionType submissionType
     );
