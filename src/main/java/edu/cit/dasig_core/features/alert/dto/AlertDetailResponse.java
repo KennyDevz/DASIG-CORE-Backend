@@ -18,13 +18,13 @@ public class AlertDetailResponse {
     private Long organizationId;
     private String organizationName;
 
+    private String reportingPeriod;
+
     // Updated to show the full math context
     private Double periodContribution; // Was previously submittedValue
     private Double cumulativeValue;    // NEW
     private Double scaledPeriodTarget; // NEW
 
-    private String reportingPeriod;
-    private Double submittedValue;
     private LocalDate submissionDate;
     private Double achievementRate;
     private String performanceStatus;

@@ -171,7 +171,6 @@ public class AlertService {
         response.setCumulativeValue(progress.cumulativeSubmittedValue());
         response.setScaledPeriodTarget(progress.expectedTarget());
 
-        response.setSubmittedValue(submission.getSubmittedValue());
         response.setSubmissionDate(submission.getSubmissionDate());
         response.setAchievementRate(submission.getAchievementRate());
         response.setPerformanceStatus(submission.getPerformanceStatus());
