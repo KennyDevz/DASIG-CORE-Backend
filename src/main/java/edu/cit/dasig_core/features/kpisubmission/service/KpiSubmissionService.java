@@ -11,8 +11,8 @@ import edu.cit.dasig_core.features.kpisubmission.model.SubmissionDocument;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
-import edu.cit.dasig_core.features.kpisubmission.util.KpiAchievementCalculator;
-import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator.KpiPeriodProgress;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -123,14 +123,21 @@ public class KpiSubmissionService {
                     "A submission already exists for this KPI, reporting period, and submission type.");
         }
 
-        double achievementRate = KpiAchievementCalculator.calculate(
-                request.getSubmittedValue(),
-                kpiDefinition.getTargetValue()
+        List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
+                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+                        request.getKpiDefinitionId(),
+                        kpiDefinition.getOrganization().getId(),
+                        submissionType
+                );
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(
+                kpiDefinition,
+                request.getReportingPeriod(),
+                relatedSubmissions,
+                request.getSubmittedValue()
         );
-        String performanceStatus = PerformanceStatusClassifier.classify(
-                achievementRate,
-                kpiDefinition.getThreshold()
-        );
+
+        double achievementRate = progress.achievementRate();
+        String performanceStatus = progress.performanceStatus();
 
         KpiSubmission submission = new KpiSubmission();
         submission.setKpiDefinition(kpiDefinition);
