@@ -34,11 +34,11 @@ public class ReportService {
 
         // 2. Filter by period and official (TBI) submissions only
         List<KpiSubmission> filtered = submissions.stream()
-                .filter(s -> s.getSubmissionType() == SubmissionType.FINAL)
                 .filter(s -> {
                     LocalDate d = s.getSubmissionDate();
-                    return (d.isEqual(periodFrom) || d.isAfter(periodFrom)) &&
-                            (d.isEqual(periodTo) || d.isBefore(periodTo));
+                    return s.getSubmissionType() == SubmissionType.FINAL
+                            && (d.isEqual(periodFrom) || d.isAfter(periodFrom))
+                            && (d.isEqual(periodTo) || d.isBefore(periodTo));
                 })
                 .toList();
 
