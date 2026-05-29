@@ -6,7 +6,10 @@ import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.service.KpiSubmissionService;
+import edu.cit.dasig_core.features.kpisubmission.service.KpiSubmissionService.SubmissionDocumentDownload;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -61,6 +64,19 @@ public class KpiSubmissionController {
         List<MultipartFile> uploadedFiles = files != null ? files : Collections.emptyList();
         KpiSubmissionResponse response = kpiSubmissionService.createSubmission(request, uploadedFiles);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PreAuthorize("hasAnyRole('TBI_MANAGER', 'STAFF')")
+    @GetMapping("/documents/{documentId}/download")
+    public ResponseEntity<byte[]> downloadDocument(@PathVariable Long documentId) {
+        SubmissionDocumentDownload document = kpiSubmissionService.getDocumentForCurrentUser(documentId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(document.fileName())
+                        .build()
+                        .toString())
+                .body(document.content());
     }
 
     private KpiDefinitionResponse toKpiDefinitionResponse(KpiDefinition kpiDefinition) {

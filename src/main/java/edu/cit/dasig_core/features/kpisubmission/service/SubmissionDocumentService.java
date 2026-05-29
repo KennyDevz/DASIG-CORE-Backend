@@ -72,6 +72,10 @@ public class SubmissionDocumentService {
         return savedDocuments;
     }
 
+    public byte[] downloadDocument(SubmissionDocument document) {
+        return supabaseStorageClient.download(document.getStoragePath());
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Uploaded files cannot be empty.");

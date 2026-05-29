@@ -38,4 +38,16 @@ public class SupabaseStorageClient {
                     "Failed to upload file to Supabase Storage: " + ex.getResponseBodyAsString(), ex);
         }
     }
+
+    public byte[] download(String objectPath) {
+        try {
+            return restClient.get()
+                    .uri("/storage/v1/object/{bucket}/{objectPath}", bucket, objectPath)
+                    .retrieve()
+                    .body(byte[].class);
+        } catch (RestClientResponseException ex) {
+            throw new IllegalStateException(
+                    "Failed to download file from Supabase Storage: " + ex.getResponseBodyAsString(), ex);
+        }
+    }
 }
