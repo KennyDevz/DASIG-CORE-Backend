@@ -12,6 +12,8 @@ public class KpiSubmissionResponse {
     private Long id;
     private Long kpiDefinitionId;
     private String kpiName;
+    private String submittedByName;
+    private String submittedByRole;
     private String reportingPeriod;
     private Double submittedValue;
     private LocalDate submissionDate;
