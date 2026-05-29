@@ -5,6 +5,7 @@ import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.notification.service.NotificationService;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import org.springframework.stereotype.Service;
@@ -18,10 +19,16 @@ public class KpiDefinitionService {
 
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final OrganizationRepository organizationRepository;
+    private final NotificationService notificationService;
 
-    public KpiDefinitionService(KpiDefinitionRepository kpiDefinitionRepository, OrganizationRepository organizationRepository) {
+    public KpiDefinitionService(
+            KpiDefinitionRepository kpiDefinitionRepository,
+            OrganizationRepository organizationRepository,
+            NotificationService notificationService
+    ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
         this.organizationRepository = organizationRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -40,6 +47,7 @@ public class KpiDefinitionService {
         kpiDef.setOrganization(org);
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.save(kpiDef);
+        notificationService.createDeadlineNotificationsIfDue();
         return mapToResponse(savedKpiDef);
     }
 
@@ -57,6 +65,7 @@ public class KpiDefinitionService {
         kpiDef.setReportingFrequency(request.getReportingFrequency());
 
         KpiDefinition updatedKpiDef = kpiDefinitionRepository.save(kpiDef);
+        notificationService.createDeadlineNotificationsIfDue();
         return mapToResponse(updatedKpiDef);
     }
 
