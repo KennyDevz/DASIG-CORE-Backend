@@ -30,4 +30,9 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
     );
 
     Optional<KpiSubmission> findFirstByKpiDefinitionIdOrderByDateCreatedDesc(Long kpiDefinitionId);
+
+    Optional<KpiSubmission> findFirstByKpiDefinitionIdAndSubmissionTypeOrderByDateCreatedDesc(
+            Long kpiDefinitionId,
+            SubmissionType submissionType
+    );
 }
