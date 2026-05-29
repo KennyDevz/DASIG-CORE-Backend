@@ -33,3 +33,7 @@ build/
 .vscode/
 
 src/main/resources/application.properties
+
+# Environment configuration files
+.env
+
