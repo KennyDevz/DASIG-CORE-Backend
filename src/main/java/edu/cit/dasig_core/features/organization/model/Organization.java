@@ -8,6 +8,8 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+import edu.cit.dasig_core.features.committee.model.Committee;
+
 @Entity
 @Table(name = "organizations")
 @Getter
@@ -36,6 +38,10 @@ public class Organization {
 
     @Column(nullable = false)
     private String status = "Active"; // "Active", "Inactive"
+
+    @ManyToOne
+    @JoinColumn(name = "committee_id")
+    private Committee committee;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

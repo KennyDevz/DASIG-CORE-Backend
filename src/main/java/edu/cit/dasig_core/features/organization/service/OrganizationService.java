@@ -8,6 +8,7 @@ import edu.cit.dasig_core.features.organization.dto.OrganizationResponse;
 import edu.cit.dasig_core.features.organization.dto.UpdateOrganizationRequest;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
+import edu.cit.dasig_core.features.committee.model.Committee;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,7 +38,12 @@ public class OrganizationService {
         org.setContactNumber(request.getContactNumber());
         org.setStatus("Active");
 
-        // 3. Save to database
+        if (request.getCommitteeId() != null) {
+            Committee committee = new Committee();
+            committee.setId(request.getCommitteeId());
+            org.setCommittee(committee);
+        }
+
         Organization savedOrg = organizationRepository.save(org);
 
         return mapToResponse(savedOrg);
@@ -58,6 +64,14 @@ public class OrganizationService {
         org.setAddress(request.getAddress());
         org.setContactEmail(request.getContactEmail());
         org.setContactNumber(request.getContactNumber());
+
+        if (request.getCommitteeId() != null) {
+            Committee committee = new Committee();
+            committee.setId(request.getCommitteeId());
+            org.setCommittee(committee);
+        } else {
+            org.setCommittee(null);
+        }
 
         Organization updatedOrg = organizationRepository.save(org);
         return mapToResponse(updatedOrg);
@@ -100,6 +114,8 @@ public class OrganizationService {
         response.setContactEmail(org.getContactEmail());
         response.setContactNumber(org.getContactNumber());
         response.setStatus(org.getStatus());
+        response.setCommitteeId(org.getCommittee() != null ? org.getCommittee().getId() : null);
+        response.setCommitteeName(org.getCommittee() != null ? org.getCommittee().getName() : null);
         return response;
     }
 }

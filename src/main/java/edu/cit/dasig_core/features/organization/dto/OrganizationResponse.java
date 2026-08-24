@@ -12,5 +12,7 @@ public class OrganizationResponse {
     private String contactEmail;
     private String contactNumber;
     private String status;
+    private Long committeeId;
+    private String committeeName;
 
 }

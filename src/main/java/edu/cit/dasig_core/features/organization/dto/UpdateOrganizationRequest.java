@@ -20,4 +20,6 @@ public class UpdateOrganizationRequest {
     private String contactEmail;
 
     private String contactNumber;
+
+    private Long committeeId;
 }
