@@ -2,7 +2,6 @@ package edu.cit.dasig_core.features.report.client;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -19,28 +18,40 @@ public class LLMApiClient {
     @Value("${groq.api-key}")
     private String apiKey;
 
+    @Value("${groq.model}")
+    private String modelName;
+
+    private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
     public String generateReport(String prompt) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + apiKey);
+        headers.setBearerAuth(apiKey);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> body = Map.of(
-                "model", "llama-3.3-70b-versatile",
-                "messages", List.of(Map.of("role", "user", "content", prompt)),
+                "model", modelName,
+                "messages", List.of(
+                        Map.of("role", "system", "content", "You are an assistant that generates structured reports."),
+                        Map.of("role", "user", "content", prompt)
+                ),
                 "max_tokens", 1500
         );
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        Map response = restTemplate.postForObject(
-                "https://api.groq.com/openai/v1/chat/completions",
-                request,
-                Map.class
-        );
+        Map<?, ?> response = restTemplate.postForObject(GROQ_URL, request, Map.class);
 
-        List<Map> choices = (List<Map>) response.get("choices");
-        Map message = (Map) choices.get(0).get("message");
+        if (response == null || !response.containsKey("choices")) {
+            throw new IllegalStateException("Groq API returned an empty or invalid response.");
+        }
+
+        List<?> choices = (List<?>) response.get("choices");
+        if (choices.isEmpty()) {
+            throw new IllegalStateException("No completion choices returned by Groq.");
+        }
+
+        Map<?, ?> firstChoice = (Map<?, ?>) choices.get(0);
+        Map<?, ?> message = (Map<?, ?>) firstChoice.get("message");
         return (String) message.get("content");
     }
 }
