@@ -28,16 +28,17 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(Authentication authentication) {
-        UserDetails userPrincipal = (UserDetails) authentication.getPrincipal();
+        CustomUserPrincipal userPrincipal = (CustomUserPrincipal) authentication.getPrincipal();
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationInMs);
 
         return Jwts.builder()
-                .subject(userPrincipal.getUsername())  // new fluent API
+                .subject(userPrincipal.getUsername())
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .claim("role", userPrincipal.getAuthorities().iterator().next().getAuthority())
-                .signWith(getSigningKey())             // key only, algo inferred
+                .claim("name", userPrincipal.getName())
+                .signWith(getSigningKey())
                 .compact();
     }
 
