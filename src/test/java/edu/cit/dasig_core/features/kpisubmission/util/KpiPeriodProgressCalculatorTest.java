@@ -40,12 +40,35 @@ class KpiPeriodProgressCalculatorTest {
 
     @Test
     void calculatesMonthlyCumulativeProgress() {
-        KpiDefinition kpi = kpiDefinition(ReportingFrequency.MONTHLY, 120.0, 96.0);
+        KpiDefinition kpi = kpiDefinition(ReportingFrequency.MONTHLY, 120.0, 80.0);
 
         KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(kpi, "Mar 2026", List.of(
                 submission("Jan 2026", 8.0),
                 submission("Feb 2026", 8.0)
         ), 8.0);
+
+        assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
+    }
+
+    @Test
+    void treatsThresholdAsPercentageOfExpectedPeriodTarget() {
+        KpiDefinition kpi = kpiDefinition(ReportingFrequency.QUARTERLY, 600.0, 80.0);
+
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(kpi, "Q1 2026", List.of(), 100.0);
+
+        assertProgress(progress, 150.0, 120.0, 100.0, 66.67, PerformanceStatusClassifier.RED);
+    }
+
+    @Test
+    void sumsMultipleSubmissionsInTheCurrentPeriod() {
+        KpiDefinition kpi = kpiDefinition(ReportingFrequency.MONTHLY, 120.0, 80.0);
+
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateExisting(kpi, "Mar 2026", List.of(
+                submission("Jan 2026", 8.0),
+                submission("Feb 2026", 8.0),
+                submission("Mar 2026", 5.0),
+                submission("Mar 2026", 3.0)
+        ));
 
         assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
     }

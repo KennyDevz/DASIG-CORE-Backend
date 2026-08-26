@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpisubmission.dto;
 
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import lombok.Data;
 
@@ -21,6 +22,11 @@ public class KpiSubmissionResponse {
     private SubmissionType submissionType;
     private Double achievementRate;
     private String performanceStatus;
+    private SubmissionReviewStatus reviewStatus;
+    private String rejectionReason;
+    private String reviewedByName;
+    private LocalDateTime reviewedAt;
+    private Long sourceSubmissionId;
     private List<SubmissionDocumentResponse> documents;
     private LocalDateTime createdAt;
 }

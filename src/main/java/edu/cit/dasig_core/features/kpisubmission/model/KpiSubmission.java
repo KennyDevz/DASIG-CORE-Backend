@@ -13,15 +13,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-        name = "kpi_submissions",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_kpi_submission_period_type",
-                        columnNames = {"organization_id", "kpi_definition_id", "reporting_period", "submission_type"}
-                )
-        }
-)
+@Table(name = "kpi_submissions")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -64,6 +56,24 @@ public class KpiSubmission {
 
     @Column(name = "performance_status", nullable = false)
     private String performanceStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status")
+    private SubmissionReviewStatus reviewStatus = SubmissionReviewStatus.PENDING;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_id")
+    private User reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_submission_id")
+    private KpiSubmission sourceSubmission;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
