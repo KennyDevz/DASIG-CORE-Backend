@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "notifications",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"kpi_definition_id", "notification_type"})
+        uniqueConstraints = @UniqueConstraint(columnNames = {"kpi_definition_id", "organization_id", "notification_type"})
 )
 @Getter
 @Setter

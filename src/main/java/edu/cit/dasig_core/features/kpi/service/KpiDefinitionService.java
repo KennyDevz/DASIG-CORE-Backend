@@ -1,13 +1,13 @@
 package edu.cit.dasig_core.features.kpi.service;
 
+import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.kpi.dto.CreateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
-import edu.cit.dasig_core.features.organization.model.Organization;
-import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,23 +18,23 @@ import java.util.stream.Collectors;
 public class KpiDefinitionService {
 
     private final KpiDefinitionRepository kpiDefinitionRepository;
-    private final OrganizationRepository organizationRepository;
+    private final CommitteeRepository committeeRepository;
     private final NotificationService notificationService;
 
     public KpiDefinitionService(
             KpiDefinitionRepository kpiDefinitionRepository,
-            OrganizationRepository organizationRepository,
+            CommitteeRepository committeeRepository,
             NotificationService notificationService
     ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
-        this.organizationRepository = organizationRepository;
+        this.committeeRepository = committeeRepository;
         this.notificationService = notificationService;
     }
 
     @Transactional
     public KpiDefinitionResponse createKpiDefinition(CreateKpiDefinitionRequest request) {
-        Organization org = organizationRepository.findById(request.getOrganizationId())
-                .orElseThrow(() -> new IllegalArgumentException("Organization not found with ID: " + request.getOrganizationId()));
+        Committee committee = committeeRepository.findById(request.getCommitteeId())
+                .orElseThrow(() -> new IllegalArgumentException("Committee not found with ID: " + request.getCommitteeId()));
 
         KpiDefinition kpiDef = new KpiDefinition();
         kpiDef.setName(request.getName());
@@ -44,7 +44,7 @@ public class KpiDefinitionService {
         kpiDef.setDeadline(request.getDeadline());
         kpiDef.setThreshold(request.getThreshold());
         kpiDef.setReportingFrequency(request.getReportingFrequency());
-        kpiDef.setOrganization(org);
+        kpiDef.setCommittee(committee);
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
         notificationService.createDeadlineNotificationsForKpi(savedKpiDef);
@@ -91,7 +91,14 @@ public class KpiDefinitionService {
     }
 
     public List<KpiDefinitionResponse> getKpiDefinitionsByOrganizationId(Long organizationId) {
-        return kpiDefinitionRepository.findByOrganizationId(organizationId)
+        return kpiDefinitionRepository.findByCommittee_Organizations_Id(organizationId)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<KpiDefinitionResponse> getKpiDefinitionsByCommitteeId(Long committeeId) {
+        return kpiDefinitionRepository.findByCommitteeId(committeeId)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -106,9 +113,13 @@ public class KpiDefinitionService {
         response.setUnit(kpiDef.getUnit());
         response.setDeadline(kpiDef.getDeadline());
         response.setThreshold(kpiDef.getThreshold());
-        response.setOrganizationId(kpiDef.getOrganization().getId());
-        response.setOrganizationName(kpiDef.getOrganization().getName());
         response.setReportingFrequency(kpiDef.getReportingFrequency());
+
+        if (kpiDef.getCommittee() != null) {
+            response.setCommitteeId(kpiDef.getCommittee().getId());
+            response.setCommitteeName(kpiDef.getCommittee().getName());
+        }
+
         return response;
     }
 }

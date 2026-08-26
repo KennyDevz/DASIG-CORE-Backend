@@ -28,8 +28,8 @@ public class CreateKpiDefinitionRequest {
     @NotNull(message = "Threshold is required")
     private Double threshold;
 
-    @NotNull(message = "Assigned Organization ID is required")
-    private Long organizationId;
+    @NotNull(message = "Assigned Committee ID is required")
+    private Long committeeId;
 
     @NotNull(message = "Reporting frequency is required")
     private ReportingFrequency reportingFrequency;

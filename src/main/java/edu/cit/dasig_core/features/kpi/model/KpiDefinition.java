@@ -1,6 +1,6 @@
 package edu.cit.dasig_core.features.kpi.model;
 
-import edu.cit.dasig_core.features.organization.model.Organization;
+import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -45,8 +45,8 @@ public class KpiDefinition {
     private ReportingFrequency reportingFrequency = ReportingFrequency.QUARTERLY;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "organization_id", nullable = false)
-    private Organization organization;
+    @JoinColumn(name = "committee_id", nullable = false)
+    private Committee committee;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

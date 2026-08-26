@@ -10,7 +10,7 @@ import java.util.Optional;
 @Repository
 public interface KpiAssignmentRepository extends JpaRepository<KpiDefinition, Long> {
 
-    Optional<KpiDefinition> findByIdAndOrganizationId(Long id, Long organizationId);
+    Optional<KpiDefinition> findByIdAndCommittee_Organizations_Id(Long id, Long organizationId);
 
-    List<KpiDefinition> findByOrganizationId(Long organizationId);
+    List<KpiDefinition> findByCommittee_Organizations_Id(Long organizationId);
 }

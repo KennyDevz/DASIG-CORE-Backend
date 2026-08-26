@@ -71,4 +71,12 @@ public class KpiDefinitionController {
         List<KpiDefinitionResponse> responses = kpiDefinitionService.getKpiDefinitionsByOrganizationId(organizationId);
         return ResponseEntity.ok(responses);
     }
+
+    // GET BY COMMITTEE (Admin Only — committee-level KPI overview)
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
+    @GetMapping("/committee/{committeeId}")
+    public ResponseEntity<List<KpiDefinitionResponse>> getKpiDefinitionsByCommitteeId(@PathVariable Long committeeId) {
+        List<KpiDefinitionResponse> responses = kpiDefinitionService.getKpiDefinitionsByCommitteeId(committeeId);
+        return ResponseEntity.ok(responses);
+    }
 }

@@ -50,8 +50,13 @@ public class ReportService {
 
         String contextHeader = "Generate a specific performance report focused strictly on the following single KPI for this incubator.\n\n";
 
-        // 3. Safely pass the KPI's exact organizationId to the helper
-        return buildAndSaveReport(submissions, kpi.getOrganization().getId(), periodFrom, periodTo, contextHeader);
+        // 3. Safely pass organizationId from submissions or committee
+        Long organizationId = !submissions.isEmpty()
+                ? submissions.get(0).getOrganization().getId()
+                : (kpi.getCommittee() != null && !kpi.getCommittee().getOrganizations().isEmpty()
+                        ? kpi.getCommittee().getOrganizations().get(0).getId()
+                        : 0L);
+        return buildAndSaveReport(submissions, organizationId, periodFrom, periodTo, contextHeader);
     }
 
     public ReportResponse getReport(String reportId) {

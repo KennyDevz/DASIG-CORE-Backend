@@ -7,6 +7,8 @@ import edu.cit.dasig_core.features.notification.dto.NotificationResponse;
 import edu.cit.dasig_core.features.notification.model.Notification;
 import edu.cit.dasig_core.features.notification.model.NotificationType;
 import edu.cit.dasig_core.features.notification.repository.NotificationRepository;
+import edu.cit.dasig_core.features.organization.model.Organization;
+import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final KpiDefinitionRepository kpiDefinitionRepository;
+    private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
 
     @Value("${app.business-timezone:Asia/Manila}")
@@ -115,25 +118,24 @@ public class NotificationService {
     }
 
     private void createNotificationIfAbsent(KpiDefinition kpi, NotificationType type) {
-        if (notificationRepository.existsByKpiDefinitionIdAndNotificationType(kpi.getId(), type)) {
+        if (kpi.getCommittee() == null) {
             return;
         }
 
-        Long organizationId = kpi.getOrganization() != null
-                ? kpi.getOrganization().getId()
-                : null;
-        if (organizationId == null) {
-            throw new IllegalStateException(
-                    "KPI " + kpi.getId() + " has no organization; cannot create notification.");
-        }
+        List<Organization> organizations = organizationRepository.findByCommitteeId(kpi.getCommittee().getId());
+        for (Organization org : organizations) {
+            if (notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(kpi.getId(), org.getId(), type)) {
+                continue;
+            }
 
-        Notification notification = new Notification();
-        notification.setKpiDefinitionId(kpi.getId());
-        notification.setOrganizationId(organizationId);
-        notification.setNotificationType(type);
-        notification.setStatus(Notification.STATUS_UNREAD);
-        notification.setMessage(buildMessage(kpi, type));
-        notificationRepository.save(notification);
+            Notification notification = new Notification();
+            notification.setKpiDefinitionId(kpi.getId());
+            notification.setOrganizationId(org.getId());
+            notification.setNotificationType(type);
+            notification.setStatus(Notification.STATUS_UNREAD);
+            notification.setMessage(buildMessage(kpi, type));
+            notificationRepository.save(notification);
+        }
     }
 
     private String buildMessage(KpiDefinition kpi, NotificationType type) {
@@ -211,7 +213,10 @@ public class NotificationService {
         response.setKpiName(kpi.getName());
         response.setKpiDescription(kpi.getDescription());
         response.setOrganizationId(notification.getOrganizationId());
-        response.setOrganizationName(kpi.getOrganization().getName());
+        String orgName = organizationRepository.findById(notification.getOrganizationId())
+                .map(Organization::getName)
+                .orElse(null);
+        response.setOrganizationName(orgName);
         response.setNotificationType(notification.getNotificationType());
         response.setDaysBeforeDeadline(notification.getNotificationType().getDaysBeforeDeadline());
         response.setDeadline(kpi.getDeadline());

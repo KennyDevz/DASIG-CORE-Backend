@@ -8,5 +8,6 @@ import java.util.List;
 
 @Repository
 public interface KpiDefinitionRepository extends JpaRepository<KpiDefinition, Long> {
-    List<KpiDefinition> findByOrganizationId(Long organizationId);
+    List<KpiDefinition> findByCommitteeId(Long committeeId);
+    List<KpiDefinition> findByCommittee_Organizations_Id(Long organizationId);
 }

@@ -101,9 +101,11 @@ public class KpiSubmissionController {
         response.setUnit(kpiDefinition.getUnit());
         response.setDeadline(kpiDefinition.getDeadline());
         response.setThreshold(kpiDefinition.getThreshold());
-        response.setOrganizationId(kpiDefinition.getOrganization().getId());
-        response.setOrganizationName(kpiDefinition.getOrganization().getName());
         response.setReportingFrequency(kpiDefinition.getReportingFrequency());
+        if (kpiDefinition.getCommittee() != null) {
+            response.setCommitteeId(kpiDefinition.getCommittee().getId());
+            response.setCommitteeName(kpiDefinition.getCommittee().getName());
+        }
         return response;
     }
 }

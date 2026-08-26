@@ -16,5 +16,7 @@ public class KpiDefinitionResponse {
     private Double threshold;
     private Long organizationId;
     private String organizationName;
+    private Long committeeId;
+    private String committeeName;
     private ReportingFrequency reportingFrequency;
 }
