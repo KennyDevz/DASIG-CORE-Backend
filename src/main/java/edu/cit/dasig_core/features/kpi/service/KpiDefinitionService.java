@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpi.service;
 
+import edu.cit.dasig_core.core.event.KpiDefinitionChangedEvent;
 import edu.cit.dasig_core.features.kpi.dto.CreateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
@@ -8,6 +9,7 @@ import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,15 +22,18 @@ public class KpiDefinitionService {
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final OrganizationRepository organizationRepository;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public KpiDefinitionService(
             KpiDefinitionRepository kpiDefinitionRepository,
             OrganizationRepository organizationRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
         this.organizationRepository = organizationRepository;
         this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -48,6 +53,13 @@ public class KpiDefinitionService {
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
         notificationService.createDeadlineNotificationsForKpi(savedKpiDef);
+
+        eventPublisher.publishEvent(new KpiDefinitionChangedEvent(
+                savedKpiDef.getId(),
+                org.getId(),
+                KpiDefinitionChangedEvent.ChangeType.CREATED
+        ));
+
         return mapToResponse(savedKpiDef);
     }
 
@@ -66,15 +78,29 @@ public class KpiDefinitionService {
 
         KpiDefinition updatedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
         notificationService.createDeadlineNotificationsForKpi(updatedKpiDef);
+
+        eventPublisher.publishEvent(new KpiDefinitionChangedEvent(
+                updatedKpiDef.getId(),
+                updatedKpiDef.getOrganization().getId(),
+                KpiDefinitionChangedEvent.ChangeType.UPDATED
+        ));
+
         return mapToResponse(updatedKpiDef);
     }
 
     @Transactional
     public void deleteKpiDefinition(Long id) {
-        if (!kpiDefinitionRepository.existsById(id)) {
-            throw new IllegalArgumentException("KPI Definition not found with ID: " + id);
-        }
+        KpiDefinition kpiDef = kpiDefinitionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("KPI Definition not found with ID: " + id));
+
+        Long organizationId = kpiDef.getOrganization().getId();
         kpiDefinitionRepository.deleteById(id);
+
+        eventPublisher.publishEvent(new KpiDefinitionChangedEvent(
+                id,
+                organizationId,
+                KpiDefinitionChangedEvent.ChangeType.DELETED
+        ));
     }
 
     public List<KpiDefinitionResponse> getAllKpiDefinitions() {

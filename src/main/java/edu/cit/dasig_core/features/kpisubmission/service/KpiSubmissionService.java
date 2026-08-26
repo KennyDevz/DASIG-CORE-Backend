@@ -160,7 +160,9 @@ public class KpiSubmissionService {
 
         eventPublisher.publishEvent(new KpiSubmittedEvent(
                 savedSubmission.getId(),
-                BigDecimal.valueOf(savedSubmission.getSubmittedValue())
+                BigDecimal.valueOf(savedSubmission.getSubmittedValue()),
+                savedSubmission.getSubmissionType(),
+                savedSubmission.getOrganization().getId()
         ));
 
         return toResponse(savedSubmission);
@@ -212,7 +214,9 @@ public class KpiSubmissionService {
             );
             eventPublisher.publishEvent(new KpiSubmittedEvent(
                     officialSubmission.getId(),
-                    BigDecimal.valueOf(officialSubmission.getSubmittedValue())
+                    BigDecimal.valueOf(officialSubmission.getSubmittedValue()),
+                    officialSubmission.getSubmissionType(),
+                    officialSubmission.getOrganization().getId()
             ));
         }
 
