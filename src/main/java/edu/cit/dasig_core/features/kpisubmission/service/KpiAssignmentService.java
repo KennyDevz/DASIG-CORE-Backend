@@ -20,7 +20,7 @@ public class KpiAssignmentService {
             throw new IllegalArgumentException("Organization is required to submit KPI values.");
         }
 
-        return kpiAssignmentRepository.findByIdAndOrganizationId(kpiDefinitionId, organizationId)
+        return kpiAssignmentRepository.findByIdAndCommittee_Organizations_Id(kpiDefinitionId, organizationId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "KPI is not assigned to your organization or does not exist."));
     }
@@ -30,7 +30,7 @@ public class KpiAssignmentService {
             throw new IllegalArgumentException("Organization is required.");
         }
 
-        return kpiAssignmentRepository.findByOrganizationId(organizationId);
+        return kpiAssignmentRepository.findByCommittee_Organizations_Id(organizationId);
     }
 
     public void validateAssignment(Long kpiDefinitionId, Long organizationId) {

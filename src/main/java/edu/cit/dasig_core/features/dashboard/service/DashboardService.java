@@ -82,11 +82,9 @@ public class DashboardService {
         List<String> orderedPeriods = new ArrayList<>(periodOptions);
         Collections.reverse(orderedPeriods);
 
-        Map<String, List<KpiSubmission>> submissionsByPeriod = kpiSubmissionRepository
-                .findByKpiDefinitionIdAndOrganizationId(
-                        kpiDefinitionId,
-                        kpiDefinition.getOrganization().getId()
-                )
+        Map<String, List<KpiSubmission>> submissionsByPeriod = (user.getOrganizationId() != null
+                ? kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationId(kpiDefinitionId, user.getOrganizationId())
+                : kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinitionId))
                 .stream()
                 .filter(submission -> matchesHistoryVisibility(user, submission))
                 .collect(Collectors.groupingBy(KpiSubmission::getReportingPeriod));
@@ -114,7 +112,7 @@ public class DashboardService {
         response.setDeadline(kpiDefinition.getDeadline());
         response.setReportingFrequency(kpiDefinition.getReportingFrequency());
         response.setCurrentPeriod(currentPeriod);
-        response.setOrganization(kpiDefinition.getOrganization().getName());
+        response.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
         response.setPeriods(periodItems);
         return response;
     }
@@ -154,7 +152,11 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
-        if (!user.getOrganizationId().equals(kpiDefinition.getOrganization().getId())) {
+        boolean hasAccess = kpiDefinition.getCommittee() != null &&
+                organizationRepository.findByCommitteeId(kpiDefinition.getCommittee().getId())
+                        .stream().anyMatch(org -> org.getId().equals(user.getOrganizationId()));
+
+        if (!hasAccess) {
             throw new IllegalArgumentException("You do not have access to this KPI.");
         }
     }
@@ -168,7 +170,7 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
-        return kpiDefinitionRepository.findByOrganizationId(user.getOrganizationId());
+        return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId());
     }
 
     private DashboardKpiItemResponse toDashboardKpiItem(
@@ -189,12 +191,16 @@ public class DashboardService {
                         LocalDate.now()
                 );
 
-        List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
-                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+        List<KpiSubmission> relatedSubmissions = user.getOrganizationId() != null
+                ? kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
                         kpiDefinition.getId(),
-                        kpiDefinition.getOrganization().getId(),
+                        user.getOrganizationId(),
                         submissionType
-                );
+                )
+                : kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId())
+                        .stream()
+                        .filter(s -> s.getSubmissionType() == submissionType)
+                        .toList();
         KpiPeriodProgress progress = reportingPeriod != null
                 ? KpiPeriodProgressCalculator.calculateExisting(kpiDefinition, reportingPeriod, relatedSubmissions)
                 : null;
@@ -214,7 +220,7 @@ public class DashboardService {
         item.setSubmittedValue(submittedValue);
         item.setUnit(kpiDefinition.getUnit());
         item.setDeadline(kpiDefinition.getDeadline());
-        item.setOrganization(kpiDefinition.getOrganization().getName());
+        item.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
         item.setAchievementRate(achievementRate);
         item.setStatus(mapStatus(performanceStatus));
         item.setReportingFrequency(kpiDefinition.getReportingFrequency());

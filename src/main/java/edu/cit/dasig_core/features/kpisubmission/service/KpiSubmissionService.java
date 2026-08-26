@@ -15,6 +15,8 @@ import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionReposit
 import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
 import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator;
 import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator.KpiPeriodProgress;
+import edu.cit.dasig_core.features.organization.model.Organization;
+import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,6 +35,7 @@ import java.util.List;
 public class KpiSubmissionService {
 
     private final UserRepository userRepository;
+    private final OrganizationRepository organizationRepository;
     private final KpiAssignmentService kpiAssignmentService;
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final SubmissionDocumentRepository submissionDocumentRepository;
@@ -41,6 +44,7 @@ public class KpiSubmissionService {
 
     public KpiSubmissionService(
             UserRepository userRepository,
+            OrganizationRepository organizationRepository,
             KpiAssignmentService kpiAssignmentService,
             KpiSubmissionRepository kpiSubmissionRepository,
             SubmissionDocumentRepository submissionDocumentRepository,
@@ -48,6 +52,7 @@ public class KpiSubmissionService {
             ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
+        this.organizationRepository = organizationRepository;
         this.kpiAssignmentService = kpiAssignmentService;
         this.kpiSubmissionRepository = kpiSubmissionRepository;
         this.submissionDocumentRepository = submissionDocumentRepository;
@@ -124,7 +129,7 @@ public class KpiSubmissionService {
         List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
                 .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
                         request.getKpiDefinitionId(),
-                        kpiDefinition.getOrganization().getId(),
+                        user.getOrganizationId(),
                         submissionType
                 );
         KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(
@@ -137,9 +142,12 @@ public class KpiSubmissionService {
         double achievementRate = progress.achievementRate();
         String performanceStatus = progress.performanceStatus();
 
+        Organization userOrganization = organizationRepository.findById(user.getOrganizationId())
+                .orElseThrow(() -> new IllegalArgumentException("Organization not found with ID: " + user.getOrganizationId()));
+
         KpiSubmission submission = new KpiSubmission();
         submission.setKpiDefinition(kpiDefinition);
-        submission.setOrganization(kpiDefinition.getOrganization());
+        submission.setOrganization(userOrganization);
         submission.setSubmittedBy(user);
         submission.setSubmittedValue(request.getSubmittedValue());
         submission.setReportingPeriod(request.getReportingPeriod());

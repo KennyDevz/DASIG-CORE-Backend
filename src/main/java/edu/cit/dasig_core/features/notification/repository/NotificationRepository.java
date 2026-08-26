@@ -10,7 +10,7 @@ import java.util.List;
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    boolean existsByKpiDefinitionIdAndNotificationType(Long kpiDefinitionId, NotificationType notificationType);
+    boolean existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(Long kpiDefinitionId, Long organizationId, NotificationType notificationType);
 
     List<Notification> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
 }

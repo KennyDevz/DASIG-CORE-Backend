@@ -5,6 +5,8 @@ import org.springframework.stereotype.Repository;
 
 import edu.cit.dasig_core.features.organization.model.Organization;
 
+import java.util.List;
+
 @Repository
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
 
@@ -13,5 +15,9 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     // Checks if a name is already taken by a DIFFERENT organization during an update
     boolean existsByNameAndIdNot(String name, Long id);
+
+    List<Organization> findByCommitteeId(Long committeeId);
+
+    List<Organization> findByCommitteeIdAndStatus(Long committeeId, String status);
 
 }
