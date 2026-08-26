@@ -34,7 +34,7 @@ public final class KpiPeriodProgressCalculator {
         int periodCount = periods.size();
         double progressRatio = (double) periodNumber / periodCount;
         double expectedTarget = kpiDefinition.getTargetValue() * progressRatio;
-        double expectedThreshold = kpiDefinition.getThreshold() * progressRatio;
+        double expectedThreshold = expectedTarget * (kpiDefinition.getThreshold() / 100);
         double cumulativeSubmittedValue = currentSubmittedValue + sumPreviousPeriodValues(
                 submissions,
                 periods,
@@ -64,8 +64,7 @@ public final class KpiPeriodProgressCalculator {
         double currentSubmittedValue = submissions.stream()
                 .filter(submission -> reportingPeriod.equals(submission.getReportingPeriod()))
                 .mapToDouble(KpiSubmission::getSubmittedValue)
-                .findFirst()
-                .orElse(0.0);
+                .sum();
 
         return calculate(kpiDefinition, reportingPeriod, submissions, currentSubmittedValue);
     }

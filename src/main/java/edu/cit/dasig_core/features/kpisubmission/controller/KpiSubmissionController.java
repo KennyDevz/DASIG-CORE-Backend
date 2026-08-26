@@ -4,6 +4,8 @@ import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
+import edu.cit.dasig_core.features.kpisubmission.dto.ReviewKpiSubmissionRequest;
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.service.KpiSubmissionService;
 import edu.cit.dasig_core.features.kpisubmission.service.KpiSubmissionService.SubmissionDocumentDownload;
@@ -35,12 +37,14 @@ public class KpiSubmissionController {
     public ResponseEntity<List<KpiSubmissionResponse>> getSubmissions(
             @RequestParam(required = false) Long kpiDefinitionId,
             @RequestParam(required = false) String reportingPeriod,
-            @RequestParam(required = false) SubmissionType submissionType
+            @RequestParam(required = false) SubmissionType submissionType,
+            @RequestParam(required = false) SubmissionReviewStatus reviewStatus
     ) {
         List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
                 kpiDefinitionId,
                 reportingPeriod,
-                submissionType
+                submissionType,
+                reviewStatus
         );
         return ResponseEntity.ok(responses);
     }
@@ -64,6 +68,15 @@ public class KpiSubmissionController {
         List<MultipartFile> uploadedFiles = files != null ? files : Collections.emptyList();
         KpiSubmissionResponse response = kpiSubmissionService.createSubmission(request, uploadedFiles);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PreAuthorize("hasRole('TBI_MANAGER')")
+    @PatchMapping("/{submissionId}/review")
+    public ResponseEntity<KpiSubmissionResponse> reviewSubmission(
+            @PathVariable Long submissionId,
+            @Valid @RequestBody ReviewKpiSubmissionRequest request
+    ) {
+        return ResponseEntity.ok(kpiSubmissionService.reviewSubmission(submissionId, request));
     }
 
     @PreAuthorize("hasAnyRole('TBI_MANAGER', 'STAFF')")

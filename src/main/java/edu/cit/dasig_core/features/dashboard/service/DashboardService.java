@@ -126,6 +126,9 @@ public class DashboardService {
         entry.setSubmittedValue(submission.getSubmittedValue());
         entry.setAchievementRate(submission.getAchievementRate());
         entry.setPerformanceStatus(submission.getPerformanceStatus());
+        entry.setReviewStatus(submission.getReviewStatus());
+        entry.setRejectionReason(submission.getRejectionReason());
+        entry.setReviewedByName(submission.getReviewedBy() != null ? submission.getReviewedBy().getName() : null);
         entry.setSubmittedByName(submission.getSubmittedBy().getName());
         entry.setSubmittedByRole(submission.getSubmittedBy().getRole());
         entry.setSubmissionDate(submission.getSubmissionDate());
