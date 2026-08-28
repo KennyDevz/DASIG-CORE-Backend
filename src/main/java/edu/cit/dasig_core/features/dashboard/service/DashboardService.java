@@ -138,7 +138,7 @@ public class DashboardService {
             return submission.getSubmissionType() == SubmissionType.FINAL;
         }
         if ("STAFF".equals(user.getRole())) {
-            return submission.getSubmissionType() == SubmissionType.INTERNAL;
+            return submission.getSubmissionType() == SubmissionType.FINAL;
         }
         return true;
     }
@@ -229,7 +229,7 @@ public class DashboardService {
     }
 
     private SubmissionType resolveSubmissionTypeForDashboard(String role) {
-        if ("DASIG_ADMIN".equals(role)) {
+        if ("DASIG_ADMIN".equals(role) || "TBI_MANAGER".equals(role) || "STAFF".equals(role)) {
             return SubmissionType.FINAL;
         }
         return SubmissionType.INTERNAL;
