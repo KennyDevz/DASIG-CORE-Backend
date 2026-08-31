@@ -69,6 +69,25 @@ public final class KpiPeriodProgressCalculator {
         return calculate(kpiDefinition, reportingPeriod, submissions, currentSubmittedValue);
     }
 
+    public static KpiPeriodProgress calculateWithNewSubmission(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            List<KpiSubmission> existingSubmissions,
+            double newSubmittedValue
+    ) {
+        double existingCurrentPeriodValue = existingSubmissions.stream()
+                .filter(submission -> reportingPeriod.equals(submission.getReportingPeriod()))
+                .mapToDouble(KpiSubmission::getSubmittedValue)
+                .sum();
+
+        return calculate(
+                kpiDefinition,
+                reportingPeriod,
+                existingSubmissions,
+                existingCurrentPeriodValue + newSubmittedValue
+        );
+    }
+
     private static double sumPreviousPeriodValues(
             List<KpiSubmission> submissions,
             List<String> periods,
