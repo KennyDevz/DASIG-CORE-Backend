@@ -74,6 +74,19 @@ class KpiPeriodProgressCalculatorTest {
     }
 
     @Test
+    void includesExistingSamePeriodValuesWhenCreatingNewSubmission() {
+        KpiDefinition kpi = kpiDefinition(ReportingFrequency.MONTHLY, 120.0, 80.0);
+
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateWithNewSubmission(kpi, "Mar 2026", List.of(
+                submission("Jan 2026", 8.0),
+                submission("Feb 2026", 8.0),
+                submission("Mar 2026", 5.0)
+        ), 3.0);
+
+        assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
+    }
+
+    @Test
     void treatsAnnualAsSinglePeriod() {
         KpiDefinition kpi = kpiDefinition(ReportingFrequency.ANNUAL, 100.0, 80.0);
 

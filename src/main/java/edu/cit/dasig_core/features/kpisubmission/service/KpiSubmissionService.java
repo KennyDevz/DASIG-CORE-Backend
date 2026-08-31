@@ -132,10 +132,10 @@ public class KpiSubmissionService {
                         user.getOrganizationId(),
                         submissionType
                 );
-        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateWithNewSubmission(
                 kpiDefinition,
                 request.getReportingPeriod(),
-                relatedSubmissions,
+                filterCountableSubmissions(relatedSubmissions),
                 request.getSubmittedValue()
         );
 
@@ -351,10 +351,10 @@ public class KpiSubmissionService {
                         SubmissionType.FINAL
                 );
 
-        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateWithNewSubmission(
                 staffSubmission.getKpiDefinition(),
                 staffSubmission.getReportingPeriod(),
-                relatedFinalSubmissions,
+                filterCountableSubmissions(relatedFinalSubmissions),
                 staffSubmission.getSubmittedValue()
         );
 
@@ -375,6 +375,12 @@ public class KpiSubmissionService {
         officialSubmission.setSourceSubmission(staffSubmission);
 
         return kpiSubmissionRepository.save(officialSubmission);
+    }
+
+    private List<KpiSubmission> filterCountableSubmissions(List<KpiSubmission> submissions) {
+        return submissions.stream()
+                .filter(submission -> submission.getReviewStatus() != SubmissionReviewStatus.REJECTED)
+                .toList();
     }
 
     public record SubmissionDocumentDownload(
