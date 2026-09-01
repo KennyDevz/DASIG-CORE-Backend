@@ -125,6 +125,7 @@ public class KpiSubmissionService {
         )) {
             throw new IllegalArgumentException("Invalid reporting period for this KPI.");
         }
+        validateSubmissionDate(request.getSubmissionDate(), kpiDefinition.getDeadline());
 
         List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
                 .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
@@ -338,6 +339,21 @@ public class KpiSubmissionService {
             return SubmissionReviewStatus.PENDING;
         }
         return SubmissionReviewStatus.APPROVED;
+    }
+
+    private void validateSubmissionDate(LocalDate submissionDate, LocalDate deadline) {
+        if (submissionDate == null) {
+            throw new IllegalArgumentException("Submission date is required.");
+        }
+
+        LocalDate today = LocalDate.now();
+        if (submissionDate.isBefore(today)) {
+            throw new IllegalArgumentException("Submission date cannot be before today.");
+        }
+
+        if (deadline != null && submissionDate.isAfter(deadline)) {
+            throw new IllegalArgumentException("Submission date cannot be after the KPI deadline.");
+        }
     }
 
     private KpiSubmission createOfficialSubmissionFromApprovedStaffSubmission(
