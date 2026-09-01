@@ -23,6 +23,8 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
 
     List<KpiSubmission> findByOrganizationId(Long organizationId);
 
+    List<KpiSubmission> findByOrganizationIdIn(List<Long> organizationIds);
+
     List<KpiSubmission> findByOrganizationIdOrderByDateCreatedDesc(Long organizationId);
 
     List<KpiSubmission> findByOrganizationIdAndReviewStatusOrderByDateCreatedDesc(

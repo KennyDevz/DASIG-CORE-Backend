@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface ReportRepository extends JpaRepository<Report, String> {
-    List<Report> findByOrganizationIdOrderByGeneratedAtDesc(Long organizationId);
+    List<Report> findAllByOrderByGeneratedAtDesc();
 }

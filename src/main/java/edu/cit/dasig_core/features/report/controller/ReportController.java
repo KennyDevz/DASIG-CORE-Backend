@@ -1,7 +1,7 @@
 package edu.cit.dasig_core.features.report.controller;
 
+import edu.cit.dasig_core.features.report.dto.GenerateCommitteeReportRequest;
 import edu.cit.dasig_core.features.report.dto.GenerateKpiReportRequest;
-import edu.cit.dasig_core.features.report.dto.GenerateOrgReportRequest;
 import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.service.ReportService;
 import jakarta.validation.Valid;
@@ -24,10 +24,10 @@ public class ReportController {
         this.reportService = reportService;
     }
 
-    @PostMapping("/generate/organization")
-    public ResponseEntity<ReportResponse> generateByOrganization(@Valid @RequestBody GenerateOrgReportRequest request) {
-        ReportResponse response = reportService.generateOrganizationReport(
-                request.getOrganizationId(),
+    @PostMapping("/generate/committee")
+    public ResponseEntity<ReportResponse> generateByCommittee(@Valid @RequestBody GenerateCommitteeReportRequest request) {
+        ReportResponse response = reportService.generateCommitteeReport(
+                request.getCommitteeId(),
                 request.getPeriodFrom(),
                 request.getPeriodTo()
         );
@@ -49,9 +49,9 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getReport(id));
     }
 
-    @GetMapping("/organization/{organizationId}")
-    public ResponseEntity<List<ReportResponse>> getByOrganization(@PathVariable Long organizationId) {
-        return ResponseEntity.ok(reportService.getReportsByOrganization(organizationId));
+    @GetMapping
+    public ResponseEntity<List<ReportResponse>> getAllReports() {
+        return ResponseEntity.ok(reportService.getAllReports());
     }
 
     @GetMapping("/{id}/export")
