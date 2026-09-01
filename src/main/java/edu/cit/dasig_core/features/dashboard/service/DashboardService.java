@@ -49,6 +49,7 @@ public class DashboardService {
         response.setRole(user.getRole());
         response.setOrganizationId(user.getOrganizationId());
         response.setOrganizationName(resolveOrganizationName(user));
+        response.setCommitteeName(resolveCommitteeName(user));
         response.setReportingPeriod(reportingPeriod);
         response.setKpis(visibleKpis.stream()
                 .map(kpi -> toDashboardKpiItem(kpi, user, reportingPeriod))
@@ -255,6 +256,16 @@ public class DashboardService {
                 .orElse(null);
     }
 
+    private String resolveCommitteeName(User user) {
+        if (user.getOrganizationId() == null) {
+            return null;
+        }
+
+        return organizationRepository.findById(user.getOrganizationId())
+                .map(org -> org.getCommittee() != null ? org.getCommittee().getName() : null)
+                .orElse(null);
+    }
+
     private User resolveCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -273,3 +284,5 @@ public class DashboardService {
         return user;
     }
 }
+
+
