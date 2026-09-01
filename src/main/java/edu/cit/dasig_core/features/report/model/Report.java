@@ -26,8 +26,15 @@ public class Report {
     @Column(name = "id", length = 20) // 3. Changed from Long to String to accept text like "PR-2026-0001"
     private String id;
 
-    @Column(name = "organization_id", nullable = false)
-    private Long organizationId;
+    @Column(name = "committee_id", nullable = false)
+    private Long committeeId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "report_type", nullable = false)
+    private ReportType reportType;
+
+    @Column(name = "kpi_definition_id")
+    private Long kpiDefinitionId;
 
     @Column(name = "period_from", nullable = false)
     private LocalDate periodFrom;

@@ -5,15 +5,19 @@ import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.draw.LineSeparator;
 import java.time.format.DateTimeFormatter;
 
+import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculator;
+import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.report.client.LLMApiClient;
 import edu.cit.dasig_core.features.report.dto.ReportResponse;
 import edu.cit.dasig_core.features.report.model.Report;
+import edu.cit.dasig_core.features.report.model.ReportType;
 import edu.cit.dasig_core.features.report.repository.ReportRepository;
 import lombok.RequiredArgsConstructor;
 import java.io.ByteArrayOutputStream;
@@ -30,33 +34,38 @@ public class ReportService {
     private final ReportRepository reportRepository;
     private final LLMApiClient llmApiClient;
     private final KpiDefinitionRepository kpiDefinitionRepository;
+    private final CommitteeRepository committeeRepository;
 
-    public ReportResponse generateOrganizationReport(Long organizationId, LocalDate periodFrom, LocalDate periodTo) {
-        // Fetch all submissions for this organization (includes historical data for math)
-        List<KpiSubmission> submissions = submissionRepository.findByOrganizationId(organizationId);
-        String contextHeader = "Generate a comprehensive organizational performance report.\n\n";
+    public ReportResponse generateCommitteeReport(Long committeeId, LocalDate periodFrom, LocalDate periodTo) {
+        Committee committee = committeeRepository.findById(committeeId)
+                .orElseThrow(() -> new IllegalArgumentException("Committee not found with ID: " + committeeId));
 
-        // Pass to the shared helper
-        return buildAndSaveReport(submissions, organizationId, periodFrom, periodTo, contextHeader);
+        // A committee report aggregates submissions across every organization under that committee
+        List<Long> organizationIds = committee.getOrganizations().stream()
+                .map(Organization::getId)
+                .toList();
+        List<KpiSubmission> submissions = organizationIds.isEmpty()
+                ? List.of()
+                : submissionRepository.findByOrganizationIdIn(organizationIds);
+
+        String contextHeader = "Generate a comprehensive committee performance report covering all incubator "
+                + "organizations under the \"" + committee.getName() + "\" committee.\n\n";
+
+        return buildAndSaveReport(submissions, committeeId, ReportType.COMMITTEE, null, periodFrom, periodTo, contextHeader);
     }
 
     public ReportResponse generateKpiReport(Long kpiDefinitionId, LocalDate periodFrom, LocalDate periodTo) {
-        // 1. Fetch the KPI to find out which organization owns it
+        // 1. Fetch the KPI to find out which committee owns it
         KpiDefinition kpi = kpiDefinitionRepository.findById(kpiDefinitionId)
                 .orElseThrow(() -> new IllegalArgumentException("KPI not found with ID: " + kpiDefinitionId));
 
-        // 2. Fetch submissions for this specific KPI
+        // 2. Fetch submissions for this specific KPI (across every organization under the committee that reports on it)
         List<KpiSubmission> submissions = submissionRepository.findByKpiDefinitionId(kpiDefinitionId);
 
-        String contextHeader = "Generate a specific performance report focused strictly on the following single KPI for this incubator.\n\n";
+        String contextHeader = "Generate a specific performance report focused strictly on the following single KPI, "
+                + "covering all incubator organizations under the \"" + kpi.getCommittee().getName() + "\" committee that report on it.\n\n";
 
-        // 3. Safely pass organizationId from submissions or committee
-        Long organizationId = !submissions.isEmpty()
-                ? submissions.get(0).getOrganization().getId()
-                : (kpi.getCommittee() != null && !kpi.getCommittee().getOrganizations().isEmpty()
-                        ? kpi.getCommittee().getOrganizations().get(0).getId()
-                        : 0L);
-        return buildAndSaveReport(submissions, organizationId, periodFrom, periodTo, contextHeader);
+        return buildAndSaveReport(submissions, kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId, periodFrom, periodTo, contextHeader);
     }
 
     public ReportResponse getReport(String reportId) {
@@ -65,8 +74,8 @@ public class ReportService {
         return mapToResponse(report);
     }
 
-    public List<ReportResponse> getReportsByOrganization(Long organizationId) {
-        return reportRepository.findByOrganizationIdOrderByGeneratedAtDesc(organizationId)
+    public List<ReportResponse> getAllReports() {
+        return reportRepository.findAllByOrderByGeneratedAtDesc()
                 .stream().map(this::mapToResponse).toList();
     }
 
@@ -173,7 +182,9 @@ public class ReportService {
 
     private ReportResponse buildAndSaveReport(
             List<KpiSubmission> allSubmissions,
-            Long organizationId,
+            Long committeeId,
+            ReportType reportType,
+            Long kpiDefinitionId,
             LocalDate periodFrom,
             LocalDate periodTo,
             String contextHeader) {
@@ -274,9 +285,10 @@ public class ReportService {
             status = "FAILED";
         }
 
-        // Save report (organizationId will safely be null for KPI global reports)
         Report report = new Report();
-        report.setOrganizationId(organizationId);
+        report.setCommitteeId(committeeId);
+        report.setReportType(reportType);
+        report.setKpiDefinitionId(kpiDefinitionId);
         report.setPeriodFrom(periodFrom);
         report.setPeriodTo(periodTo);
         report.setNarrativeText(narrative);
@@ -290,7 +302,17 @@ public class ReportService {
     private ReportResponse mapToResponse(Report report) {
         ReportResponse response = new ReportResponse();
         response.setId(report.getId());
-        response.setOrganizationId(report.getOrganizationId());
+        response.setCommitteeId(report.getCommitteeId());
+        response.setCommitteeName(committeeRepository.findById(report.getCommitteeId())
+                .map(Committee::getName)
+                .orElse(null));
+        response.setReportType(report.getReportType());
+        response.setKpiDefinitionId(report.getKpiDefinitionId());
+        if (report.getKpiDefinitionId() != null) {
+            response.setKpiName(kpiDefinitionRepository.findById(report.getKpiDefinitionId())
+                    .map(KpiDefinition::getName)
+                    .orElse(null));
+        }
         response.setPeriodFrom(report.getPeriodFrom());
         response.setPeriodTo(report.getPeriodTo());
         response.setNarrativeText(report.getNarrativeText());

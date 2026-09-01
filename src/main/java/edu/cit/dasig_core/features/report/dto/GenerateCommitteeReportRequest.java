@@ -6,10 +6,10 @@ import lombok.Data;
 import java.time.LocalDate;
 
 @Data
-public class GenerateOrgReportRequest {
+public class GenerateCommitteeReportRequest {
 
-    @NotNull(message = "Organization ID is required")
-    private Long organizationId;
+    @NotNull(message = "Committee ID is required")
+    private Long committeeId;
 
     @NotNull(message = "Period from is required")
     private LocalDate periodFrom;
