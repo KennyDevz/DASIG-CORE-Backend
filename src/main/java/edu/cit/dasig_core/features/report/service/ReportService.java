@@ -1,6 +1,8 @@
 package edu.cit.dasig_core.features.report.service;
 
 import com.itextpdf.text.*;
+import com.itextpdf.text.pdf.PdfPCell;
+import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.draw.LineSeparator;
 import java.time.format.DateTimeFormatter;
@@ -24,11 +26,16 @@ import java.io.ByteArrayOutputStream;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class ReportService {
+
+    private static final Pattern INLINE_FORMAT_PATTERN = Pattern.compile("\\*\\*(.+?)\\*\\*|\\*(.+?)\\*");
 
     private final KpiSubmissionRepository submissionRepository;
     private final ReportRepository reportRepository;
@@ -93,6 +100,7 @@ public class ReportService {
             Font headerFont  = new Font(Font.FontFamily.HELVETICA, 13, Font.BOLD);
             Font labelFont   = new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD);
             Font bodyFont    = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
+            Font italicFont  = new Font(Font.FontFamily.HELVETICA, 10, Font.ITALIC);
             Font bulletFont  = new Font(Font.FontFamily.HELVETICA, 10, Font.NORMAL);
 
             // Title
@@ -132,43 +140,84 @@ public class ReportService {
 
             // Parse and render narrative
             String[] lines = report.getNarrativeText().split("\n");
-            for (String line : lines) {
-                String trimmed = line.trim();
+            int i = 0;
+            while (i < lines.length) {
+                String trimmed = lines[i].trim();
+
                 if (trimmed.isEmpty()) {
                     document.add(Chunk.NEWLINE);
+                    i++;
+                } else if (trimmed.startsWith("|")) {
+                    // Markdown table. The LLM doesn't always emit a clean |---|---| separator row,
+                    // and sometimes wraps a single logical row across multiple physical lines mid-cell,
+                    // so join lines into logical rows until each one actually ends with '|'.
+                    List<String> rawRows = new ArrayList<>();
+                    StringBuilder rowBuffer = new StringBuilder();
+                    int continuationCount = 0;
+                    while (i < lines.length) {
+                        String candidate = lines[i].trim();
+                        if (rowBuffer.length() == 0) {
+                            if (candidate.isEmpty() || !candidate.startsWith("|")) {
+                                break; // left the table
+                            }
+                            rowBuffer.append(candidate);
+                            continuationCount = 0;
+                        } else {
+                            if (candidate.isEmpty()) {
+                                break; // unterminated row; stop rather than swallow the rest of the document
+                            }
+                            rowBuffer.append(' ').append(candidate);
+                            continuationCount++;
+                        }
+                        i++;
+                        if (rowBuffer.toString().endsWith("|") || continuationCount >= 6) {
+                            rawRows.add(rowBuffer.toString());
+                            rowBuffer.setLength(0);
+                        }
+                    }
+                    if (rowBuffer.length() > 0) {
+                        rawRows.add(rowBuffer.toString());
+                    }
+
+                    List<String> headerCells = splitTableRow(rawRows.get(0));
+                    int bodyStart = (rawRows.size() > 1 && isTableSeparatorRow(rawRows.get(1))) ? 2 : 1;
+                    List<List<String>> bodyRows = new ArrayList<>();
+                    for (int r = bodyStart; r < rawRows.size(); r++) {
+                        bodyRows.add(splitTableRow(rawRows.get(r)));
+                    }
+                    document.add(buildTable(headerCells, bodyRows, labelFont, bodyFont, italicFont));
                 } else if (trimmed.startsWith("### ") || trimmed.startsWith("## ") || trimmed.startsWith("# ")) {
-                    // Section headers
-                    String headerText = trimmed.replaceAll("^#{1,3}\\s*", "").replace("**", "");
+                    // Markdown section headers
+                    String headerText = stripInlineMarkers(trimmed.replaceAll("^#{1,3}\\s*", ""));
                     Paragraph header = new Paragraph(headerText, headerFont);
                     header.setSpacingBefore(14);
                     header.setSpacingAfter(6);
                     document.add(header);
+                    i++;
+                } else if (trimmed.matches("^\\d+\\.\\s+[^.!?]+$")) {
+                    // Numbered section headings (e.g. "1. Overall Performance Summary"), per the required report structure
+                    String headerText = stripInlineMarkers(trimmed.replaceFirst("^\\d+\\.\\s+", ""));
+                    Paragraph header = new Paragraph(headerText, headerFont);
+                    header.setSpacingBefore(14);
+                    header.setSpacingAfter(6);
+                    document.add(header);
+                    i++;
                 } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-                    // Bullet points
-                    String bulletText = trimmed.substring(2).replace("**", "");
-                    Paragraph bullet = new Paragraph("• " + bulletText, bulletFont);
+                    // Bullet points — handle inline **bold**/*italic*
+                    Paragraph bullet = new Paragraph();
+                    bullet.add(new Chunk("• ", bulletFont));
+                    appendInlineFormatted(bullet, trimmed.substring(2), bulletFont, labelFont, italicFont);
                     bullet.setIndentationLeft(16);
                     bullet.setSpacingAfter(4);
                     document.add(bullet);
-                } else if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
-                    // Bold standalone lines
-                    String boldText = trimmed.replace("**", "");
-                    Paragraph bold = new Paragraph(boldText, labelFont);
-                    bold.setSpacingAfter(4);
-                    document.add(bold);
+                    i++;
                 } else {
-                    // Regular paragraph — handle inline **bold**
+                    // Regular paragraph — handle inline **bold**/*italic*
                     Paragraph para = new Paragraph();
                     para.setSpacingAfter(4);
-                    String[] parts = trimmed.split("\\*\\*");
-                    for (int i = 0; i < parts.length; i++) {
-                        if (i % 2 == 1) {
-                            para.add(new Chunk(parts[i], labelFont)); // bold
-                        } else {
-                            para.add(new Chunk(parts[i], bodyFont));  // normal
-                        }
-                    }
+                    appendInlineFormatted(para, trimmed, bodyFont, labelFont, italicFont);
                     document.add(para);
+                    i++;
                 }
             }
 
@@ -178,6 +227,90 @@ public class ReportService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate PDF: " + e.getMessage());
         }
+    }
+
+    private boolean isTableRow(String line) {
+        return line.length() > 1 && line.startsWith("|") && line.endsWith("|");
+    }
+
+    private boolean isTableSeparatorRow(String line) {
+        return isTableRow(line) && line.chars().allMatch(c -> c == '|' || c == '-' || c == ':' || c == ' ');
+    }
+
+    private List<String> splitTableRow(String line) {
+        String[] rawCells = line.substring(1, line.length() - 1).split("\\|", -1);
+        List<String> cells = new ArrayList<>();
+        for (String cell : rawCells) {
+            cells.add(cell.trim());
+        }
+        return cells;
+    }
+
+    private PdfPTable buildTable(
+            List<String> headerCells, List<List<String>> bodyRows, Font headerFont, Font bodyFont, Font italicFont) {
+        PdfPTable table = new PdfPTable(headerCells.size());
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(6);
+        table.setSpacingAfter(10);
+
+        for (String header : headerCells) {
+            Phrase phrase = new Phrase();
+            appendInlineFormatted(phrase, header, headerFont, headerFont, italicFont);
+            PdfPCell cell = new PdfPCell(phrase);
+            cell.setBackgroundColor(new BaseColor(230, 230, 230));
+            cell.setPadding(5);
+            table.addCell(cell);
+        }
+
+        for (List<String> row : bodyRows) {
+            for (int c = 0; c < headerCells.size(); c++) {
+                String value = c < row.size() ? row.get(c) : "";
+                Phrase phrase = new Phrase();
+                appendInlineFormatted(phrase, value, bodyFont, headerFont, italicFont);
+                PdfPCell cell = new PdfPCell(phrase);
+                cell.setPadding(5);
+                table.addCell(cell);
+            }
+        }
+
+        return table;
+    }
+
+    /**
+     * Appends text to a Phrase (or Paragraph, which extends Phrase), splitting out
+     * **bold** and *italic* markdown spans into their own Chunks with the matching font.
+     */
+    private void appendInlineFormatted(Phrase target, String text, Font normalFont, Font boldFont, Font italicFont) {
+        Matcher matcher = INLINE_FORMAT_PATTERN.matcher(text);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            if (matcher.start() > lastEnd) {
+                target.add(new Chunk(text.substring(lastEnd, matcher.start()), normalFont));
+            }
+            if (matcher.group(1) != null) {
+                target.add(new Chunk(matcher.group(1), boldFont));
+            } else {
+                target.add(new Chunk(matcher.group(2), italicFont));
+            }
+            lastEnd = matcher.end();
+        }
+        if (lastEnd < text.length()) {
+            target.add(new Chunk(text.substring(lastEnd), normalFont));
+        }
+    }
+
+    /** Strips **bold**//**italic* markdown markers from text without preserving styling (e.g. for headers). */
+    private String stripInlineMarkers(String text) {
+        Matcher matcher = INLINE_FORMAT_PATTERN.matcher(text);
+        StringBuilder result = new StringBuilder();
+        int lastEnd = 0;
+        while (matcher.find()) {
+            result.append(text, lastEnd, matcher.start());
+            result.append(matcher.group(1) != null ? matcher.group(1) : matcher.group(2));
+            lastEnd = matcher.end();
+        }
+        result.append(text.substring(lastEnd));
+        return result.toString();
     }
 
     private ReportResponse buildAndSaveReport(
@@ -209,7 +342,7 @@ public class ReportService {
         prompt.append("- 'Period Contribution' is the raw value achieved solely during that specific interval.\n");
         prompt.append("- 'Cumulative Value To Date' is the running total of all contributions up to that period.\n");
         prompt.append("- Performance Status (GREEN/ON_TRACK, YELLOW/AT_RISK, RED/DELAYED) and Achievement Rates are calculated strictly against the scaled cumulative targets and thresholds for that period, not the full annual target.\n");
-        prompt.append("- These figures represent official FINAL entries approved by the TBI Manager.\n\n");
+        prompt.append("- These figures represent official FINAL entries approved by the Committee Lead.\n\n");
 
         prompt.append("=== REPORT PARAMETERS ===\n");
         prompt.append("Reporting Window: ").append(periodFrom).append(" to ").append(periodTo).append("\n\n");
@@ -237,7 +370,7 @@ public class ReportService {
                 // Inject the exact calculator outputs into the prompt
                 prompt.append(String.format(
                         "- KPI Name: %s\n" +
-                                "  * Incubator/Organization: %s\n" + // Added this so the LLM knows who submitted it in global reports
+                                "  * Incubator/Committee: %s\n" + // Added this so the LLM knows who submitted it in global reports
                                 "  * Reporting Period: %s\n" +
                                 "  * Frequency: %s\n" +
                                 "  * Period Contribution (Raw): %.2f %s\n" +
@@ -264,7 +397,7 @@ public class ReportService {
         }
 
         prompt.append("=== REQUIRED REPORT STRUCTURE ===\n");
-        prompt.append("Write a professional narrative analyzing these trends using these exact headings:\n");
+        prompt.append("Write a professional narrative analyzing these trends using these exact headings, and nothing else:\n");
         prompt.append("1. Overall Performance Summary\n");
         prompt.append("   (Analyze how the cumulative trajectory is moving across the window. Appreciate steady gains even if temporary periods look low due to contribution dips.)\n");
         prompt.append("2. Underperforming KPIs\n");
@@ -272,7 +405,15 @@ public class ReportService {
         prompt.append("3. Major Progress Points\n");
         prompt.append("   (Point out standout individual period contributions that significantly boosted or recovered the cumulative health status to ON_TRACK.)\n");
         prompt.append("4. Recommendations\n");
-        prompt.append("   (Provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.)\n");
+        prompt.append("   (Provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.)\n\n");
+
+        prompt.append("=== OUTPUT FORMATTING RULES (STRICT) ===\n");
+        prompt.append("- Do NOT include a title, subtitle, or preamble before heading \"1.\" — the response must start directly with \"1. Overall Performance Summary\".\n");
+        prompt.append("- Do NOT use horizontal rule lines (e.g. \"---\" or \"***\") anywhere.\n");
+        prompt.append("- Do NOT escape asterisks with a backslash (never write \"\\*\"); if a line should start with a literal \"-\" or \"*\" character that is not a bullet or emphasis, rephrase it instead.\n");
+        prompt.append("- For any tabular or columnar data (per-KPI breakdowns, comparisons, etc.), you MUST use a proper Markdown pipe table: a header row, then a \"|---|---|\" separator row, then data rows — never align columns with plain spaces.\n");
+        prompt.append("- Use **bold** only to emphasize a handful of key terms or figures, and plain text otherwise. Avoid *italics* unless truly necessary. Never nest bold and italics together.\n");
+        prompt.append("- Keep every hyphen in compound words (e.g. \"period-specific\", \"real-time\") and in dates (e.g. \"2026-08-01\") exactly as written — do not drop them.\n");
 
         // Call Groq LLM API
         String narrative;
