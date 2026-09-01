@@ -34,7 +34,7 @@ public class LLMApiClient {
                         Map.of("role", "system", "content", "You are an assistant that generates structured reports."),
                         Map.of("role", "user", "content", prompt)
                 ),
-                "max_tokens", 1500
+                "max_tokens", 4000
         );
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
