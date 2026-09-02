@@ -37,7 +37,6 @@ public class User {
     @Column(name = "organization_id")
     private Long organizationId; // Nullable: Only required for TBI_MANAGER and STAFF
 
-    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime dateCreated;
 
