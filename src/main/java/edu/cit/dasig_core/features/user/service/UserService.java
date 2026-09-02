@@ -51,7 +51,7 @@ public class UserService {
         // 5. Save to database
         User savedUser = userRepository.save(user);
 
-        eventPublisher.publishEvent(new UserCreatedEvent(savedUser.getEmail(), savedUser.getName(), tempPassword));
+        eventPublisher.publishEvent(new UserCreatedEvent(savedUser.getEmail(), savedUser.getName(), tempPassword, savedUser.getRole()));
         return mapToResponse(savedUser);
     }
 
