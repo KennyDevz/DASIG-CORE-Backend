@@ -25,7 +25,8 @@ public class UserAccountEventListener {
             emailService.sendTemporaryPasswordEmail(
                     event.getEmail(),
                     event.getName(),
-                    event.getPlainTextPassword()
+                    event.getPlainTextPassword(),
+                    event.getRole()
             );
         } else {
             System.err.println("Infrastructural Alert: EmailService reference wiring failed inside target context listener.");
