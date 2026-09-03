@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 public class AlertResponse {
     private Long id;
     private Long submissionId;
+    private Long kpiDefinitionId;
+    private String alertType;
+    private String severity;
     private String status;
     private LocalDateTime detectedAt;
 }
