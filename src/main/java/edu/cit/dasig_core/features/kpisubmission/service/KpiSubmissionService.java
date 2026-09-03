@@ -350,10 +350,7 @@ public class KpiSubmissionService {
         if (submissionDate.isBefore(today)) {
             throw new IllegalArgumentException("Submission date cannot be before today.");
         }
-
-        if (deadline != null && submissionDate.isAfter(deadline)) {
-            throw new IllegalArgumentException("Submission date cannot be after the KPI deadline.");
-        }
+        // Submissions are permitted even after the deadline (late submissions)
     }
 
     private KpiSubmission createOfficialSubmissionFromApprovedStaffSubmission(
