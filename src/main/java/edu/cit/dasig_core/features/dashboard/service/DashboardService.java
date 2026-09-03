@@ -223,7 +223,7 @@ public class DashboardService {
         item.setDeadline(kpiDefinition.getDeadline());
         item.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
         item.setAchievementRate(achievementRate);
-        item.setStatus(mapStatus(performanceStatus));
+        item.setStatus(mapStatus(performanceStatus, submittedValue, kpiDefinition.getTargetValue()));
         item.setReportingFrequency(kpiDefinition.getReportingFrequency());
         item.setReportingPeriod(reportingPeriod);
         return item;
@@ -236,7 +236,17 @@ public class DashboardService {
         return SubmissionType.INTERNAL;
     }
 
-    private String mapStatus(String performanceStatus) {
+    /**
+     * Maps backend performance status to the dashboard KPI status string.
+     *
+     * <p>Uses goal completion as the primary signal: if the overall target
+     * has been reached, the KPI is COMPLETED regardless of performanceStatus.
+     * Otherwise, delegates to the deadline-paced PerformanceStatusClassifier result.</p>
+     */
+    private String mapStatus(String performanceStatus, double cumulativeSubmittedValue, double overallTargetValue) {
+        if (overallTargetValue > 0 && cumulativeSubmittedValue >= overallTargetValue) {
+            return "COMPLETED";
+        }
         if (PerformanceStatusClassifier.GREEN.equals(performanceStatus)) {
             return "ON_TRACK";
         }
@@ -284,5 +294,3 @@ public class DashboardService {
         return user;
     }
 }
-
-

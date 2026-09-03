@@ -7,6 +7,14 @@ import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Calculates cumulative KPI progress and classifies performance status.
+ *
+ * <p>For ONE_TIME KPIs (Submit Anytime workflow), there is exactly one reporting
+ * period. Progress is cumulative across all submissions, compared against the
+ * overall target value. Status is determined by deadline proximity and goal
+ * completion rather than periodic thresholds.</p>
+ */
 public final class KpiPeriodProgressCalculator {
 
     private KpiPeriodProgressCalculator() {
@@ -33,23 +41,29 @@ public final class KpiPeriodProgressCalculator {
         int periodNumber = zeroBasedPeriodIndex + 1;
         int periodCount = periods.size();
         double progressRatio = (double) periodNumber / periodCount;
+        // expectedTarget is the proportional target for this period in periodic KPIs,
+        // or just the full targetValue for ONE_TIME KPIs (periodCount == 1).
         double expectedTarget = kpiDefinition.getTargetValue() * progressRatio;
-        double expectedThreshold = expectedTarget * (kpiDefinition.getThreshold() / 100);
+
         double cumulativeSubmittedValue = currentSubmittedValue + sumPreviousPeriodValues(
                 submissions,
                 periods,
                 zeroBasedPeriodIndex
         );
+
         double achievementRate = KpiAchievementCalculator.calculate(cumulativeSubmittedValue, expectedTarget);
+
+        // Use deadline-paced classification against overall target
         String performanceStatus = PerformanceStatusClassifier.classify(
                 cumulativeSubmittedValue,
-                expectedTarget,
-                expectedThreshold
+                kpiDefinition.getTargetValue(),
+                kpiDefinition.getDeadline()
         );
 
         return new KpiPeriodProgress(
                 expectedTarget,
-                expectedThreshold,
+                // expectedThreshold is kept for API compatibility but is now equal to expectedTarget
+                expectedTarget,
                 cumulativeSubmittedValue,
                 achievementRate,
                 performanceStatus
