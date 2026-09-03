@@ -15,15 +15,18 @@ public class AlertDetailResponse {
 
     private Long kpiDefinitionId;
     private String kpiName;
-    private Long organizationId;
-    private String organizationName;
+    private String committeeName;
+
+    private String alertType;
+    private String severity;
+    private LocalDate deadline;
+    private Long daysUntilDeadline;
 
     private String reportingPeriod;
 
-    // Updated to show the full math context
-    private Double periodContribution; // Was previously submittedValue
-    private Double cumulativeValue;    // NEW
-    private Double scaledPeriodTarget; // NEW
+    private Double periodContribution;
+    private Double cumulativeValue;
+    private Double scaledPeriodTarget;
 
     private LocalDate submissionDate;
     private Double achievementRate;
