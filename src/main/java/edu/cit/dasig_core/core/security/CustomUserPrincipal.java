@@ -28,6 +28,10 @@ public class CustomUserPrincipal implements UserDetails {
         return user.getRole();
     }
 
+    public boolean isMustChangePassword() {
+        return user.isMustChangePassword();
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
