@@ -4,10 +4,13 @@ import edu.cit.dasig_core.core.event.UserCreatedEvent;
 import edu.cit.dasig_core.core.smtp.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import edu.cit.dasig_core.features.user.dto.ChangePasswordRequest;
 import edu.cit.dasig_core.features.user.dto.CreateUserRequest;
 import edu.cit.dasig_core.features.user.dto.UpdateUserRequest;
 import edu.cit.dasig_core.features.user.dto.UserResponse;
@@ -86,8 +89,36 @@ public class UserService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public void changeOwnPassword(ChangePasswordRequest request) {
+        User user = resolveCurrentUser();
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("Current password is incorrect.");
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("New password must be different from your current password.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+    }
+
+    private User resolveCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalArgumentException("Authentication is required.");
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found."));
+    }
+
     /**
-     * Cross-field validation: Ensures TBI Managers/Staff belong to an organization, 
+     * Cross-field validation: Ensures TBI Managers/Staff belong to an organization,
      * but prevents the global DASIG Admin from being restricted to one.
      */
     private void validateOrganizationRequirement(String role, Long organizationId) {

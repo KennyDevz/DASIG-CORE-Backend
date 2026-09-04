@@ -41,4 +41,7 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime dateCreated;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = true;
+
 }

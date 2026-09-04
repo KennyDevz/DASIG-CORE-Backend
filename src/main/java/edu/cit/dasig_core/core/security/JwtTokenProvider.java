@@ -38,6 +38,7 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .claim("role", userPrincipal.getAuthorities().iterator().next().getAuthority())
                 .claim("name", userPrincipal.getName())
+                .claim("mustChangePassword", userPrincipal.isMustChangePassword())
                 .signWith(getSigningKey())
                 .compact();
     }
