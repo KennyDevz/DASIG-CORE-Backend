@@ -85,6 +85,14 @@ class KpiSubmissionServiceTest {
         return user;
     }
 
+    private User user(String role, Long orgId, Long id, String email, String name) {
+        User user = user(role, orgId);
+        user.setId(id);
+        user.setEmail(email);
+        user.setName(name);
+        return user;
+    }
+
     private KpiDefinition kpiOneTime(LocalDate deadline) {
         KpiDefinition kpi = new KpiDefinition();
         kpi.setId(1L);
@@ -103,6 +111,60 @@ class KpiSubmissionServiceTest {
     private String validPeriodFor(KpiDefinition kpi) {
         return ReportingPeriodResolver.generatePeriodOptions(
                 kpi.getReportingFrequency(), kpi.getDeadline(), kpi.getDeadline()).get(0);
+    }
+
+    // ---- getSubmissionsForCurrentUser ----
+
+    @Test
+    void getSubmissionsForCurrentUser_staffSeesOnlyOwnInternalSubmissionsByDefault() {
+        authenticateAs("member-a@example.com");
+        User memberA = user("STAFF", 9L, 10L, "member-a@example.com", "Member A");
+        User memberB = user("STAFF", 9L, 11L, "member-b@example.com", "Member B");
+        when(userRepository.findByEmail("member-a@example.com")).thenReturn(Optional.of(memberA));
+
+        KpiSubmission ownSubmission = internalPendingSubmission(9L);
+        ownSubmission.setId(100L);
+        ownSubmission.setSubmittedBy(memberA);
+
+        KpiSubmission otherMemberSubmission = internalPendingSubmission(9L);
+        otherMemberSubmission.setId(101L);
+        otherMemberSubmission.setSubmittedBy(memberB);
+
+        when(kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(9L))
+                .thenReturn(List.of(ownSubmission, otherMemberSubmission));
+        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+
+        List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
+                null, null, null, null);
+
+        assertThat(responses)
+                .extracting(KpiSubmissionResponse::getId)
+                .containsExactly(100L);
+    }
+
+    @Test
+    void getSubmissionsForCurrentUser_staffCanStillRequestFinalSubmissions() {
+        authenticateAs("member-a@example.com");
+        User memberA = user("STAFF", 9L, 10L, "member-a@example.com", "Member A");
+        User committeeLead = user("TBI_MANAGER", 9L, 12L, "lead@example.com", "Committee Lead");
+        when(userRepository.findByEmail("member-a@example.com")).thenReturn(Optional.of(memberA));
+
+        KpiSubmission finalSubmission = internalPendingSubmission(9L);
+        finalSubmission.setId(200L);
+        finalSubmission.setSubmittedBy(committeeLead);
+        finalSubmission.setSubmissionType(SubmissionType.FINAL);
+        finalSubmission.setReviewStatus(SubmissionReviewStatus.APPROVED);
+
+        when(kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(9L))
+                .thenReturn(List.of(finalSubmission));
+        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+
+        List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
+                null, null, SubmissionType.FINAL, null);
+
+        assertThat(responses)
+                .extracting(KpiSubmissionResponse::getId)
+                .containsExactly(200L);
     }
 
     // ---- createSubmission ----

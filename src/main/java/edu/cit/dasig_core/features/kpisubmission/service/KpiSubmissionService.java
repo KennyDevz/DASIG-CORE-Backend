@@ -95,11 +95,20 @@ public class KpiSubmissionService {
 
     private boolean matchesRoleVisibility(User user, KpiSubmission submission, SubmissionType requestedSubmissionType) {
         if ("STAFF".equals(user.getRole())) {
-            return requestedSubmissionType == SubmissionType.FINAL
-                    ? submission.getSubmissionType() == SubmissionType.FINAL
-                    : submission.getSubmissionType() == SubmissionType.INTERNAL;
+            if (requestedSubmissionType == SubmissionType.FINAL) {
+                return submission.getSubmissionType() == SubmissionType.FINAL;
+            }
+
+            return submission.getSubmissionType() == SubmissionType.INTERNAL
+                    && isSubmittedByCurrentUser(user, submission);
         }
         return true;
+    }
+
+    private boolean isSubmittedByCurrentUser(User user, KpiSubmission submission) {
+        return submission.getSubmittedBy() != null
+                && submission.getSubmittedBy().getId() != null
+                && submission.getSubmittedBy().getId().equals(user.getId());
     }
 
     @Transactional
