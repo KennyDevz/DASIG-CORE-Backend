@@ -7,6 +7,11 @@ import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.alert.repository.AlertRepository;
+import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
+import edu.cit.dasig_core.features.notification.repository.NotificationRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,15 +25,27 @@ public class KpiDefinitionService {
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final CommitteeRepository committeeRepository;
     private final NotificationService notificationService;
+    private final NotificationRepository notificationRepository;
+    private final AlertRepository alertRepository;
+    private final KpiSubmissionRepository kpiSubmissionRepository;
+    private final SubmissionDocumentRepository submissionDocumentRepository;
 
     public KpiDefinitionService(
             KpiDefinitionRepository kpiDefinitionRepository,
             CommitteeRepository committeeRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            NotificationRepository notificationRepository,
+            AlertRepository alertRepository,
+            KpiSubmissionRepository kpiSubmissionRepository,
+            SubmissionDocumentRepository submissionDocumentRepository
     ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
         this.committeeRepository = committeeRepository;
         this.notificationService = notificationService;
+        this.notificationRepository = notificationRepository;
+        this.alertRepository = alertRepository;
+        this.kpiSubmissionRepository = kpiSubmissionRepository;
+        this.submissionDocumentRepository = submissionDocumentRepository;
     }
 
     @Transactional
@@ -70,10 +87,55 @@ public class KpiDefinitionService {
     }
 
     @Transactional
+    public KpiDefinitionResponse archiveKpiDefinition(Long id) {
+        KpiDefinition kpiDef = kpiDefinitionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("KPI Definition not found with ID: " + id));
+
+        kpiDef.setStatus(KpiDefinition.STATUS_ARCHIVED);
+        KpiDefinition saved = kpiDefinitionRepository.saveAndFlush(kpiDef);
+
+        // Clear active alerts and notifications for this archived KPI
+        alertRepository.deleteByKpiDefinitionId(id);
+        notificationRepository.deleteByKpiDefinitionId(id);
+
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public KpiDefinitionResponse unarchiveKpiDefinition(Long id) {
+        KpiDefinition kpiDef = kpiDefinitionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("KPI Definition not found with ID: " + id));
+
+        kpiDef.setStatus(KpiDefinition.STATUS_ACTIVE);
+        KpiDefinition saved = kpiDefinitionRepository.saveAndFlush(kpiDef);
+
+        // Re-evaluate deadline notifications
+        notificationService.createDeadlineNotificationsForKpi(saved);
+
+        return mapToResponse(saved);
+    }
+
+    @Transactional
     public void deleteKpiDefinition(Long id) {
         if (!kpiDefinitionRepository.existsById(id)) {
             throw new IllegalArgumentException("KPI Definition not found with ID: " + id);
         }
+
+        // 1. Delete notifications
+        notificationRepository.deleteByKpiDefinitionId(id);
+
+        // 2. Delete alerts
+        alertRepository.deleteByKpiDefinitionId(id);
+
+        // 3. Delete submissions and associated documents/alerts
+        List<KpiSubmission> submissions = kpiSubmissionRepository.findByKpiDefinitionId(id);
+        for (KpiSubmission submission : submissions) {
+            alertRepository.deleteBySubmissionId(submission.getId());
+            submissionDocumentRepository.deleteBySubmissionId(submission.getId());
+        }
+        kpiSubmissionRepository.deleteAll(submissions);
+
+        // 4. Delete KPI definition
         kpiDefinitionRepository.deleteById(id);
     }
 
@@ -114,6 +176,8 @@ public class KpiDefinitionService {
         response.setDeadline(kpiDef.getDeadline());
         response.setThreshold(kpiDef.getThreshold());
         response.setReportingFrequency(kpiDef.getReportingFrequency());
+        response.setStatus(kpiDef.getStatus());
+        response.setArchived(kpiDef.isArchived());
 
         if (kpiDef.getCommittee() != null) {
             response.setCommitteeId(kpiDef.getCommittee().getId());

@@ -115,6 +115,8 @@ public class DashboardService {
         response.setCurrentPeriod(currentPeriod);
         response.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
         response.setPeriods(periodItems);
+        response.setKpiStatus(kpiDefinition.getStatus());
+        response.setArchived(kpiDefinition.isArchived());
         return response;
     }
 
@@ -171,7 +173,10 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
-        return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId());
+        return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId())
+                .stream()
+                .filter(kpi -> !kpi.isArchived())
+                .toList();
     }
 
     private DashboardKpiItemResponse toDashboardKpiItem(
@@ -226,6 +231,8 @@ public class DashboardService {
         item.setStatus(mapStatus(performanceStatus, submittedValue, kpiDefinition.getTargetValue()));
         item.setReportingFrequency(kpiDefinition.getReportingFrequency());
         item.setReportingPeriod(reportingPeriod);
+        item.setKpiStatus(kpiDefinition.getStatus());
+        item.setArchived(kpiDefinition.isArchived());
         return item;
     }
 

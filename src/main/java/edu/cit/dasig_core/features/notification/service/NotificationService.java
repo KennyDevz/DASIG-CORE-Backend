@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class NotificationService {
         return LocalDate.now(ZoneId.of(businessTimezone));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<NotificationResponse> getAllNotifications() {
         User user = resolveCurrentUser();
         validateNotificationViewerRole(user);
@@ -47,7 +49,23 @@ public class NotificationService {
         List<Notification> notifications =
                 notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(user.getOrganizationId());
 
-        return notifications.stream().map(this::toResponse).toList();
+        List<NotificationResponse> responses = new ArrayList<>();
+        for (Notification notification : notifications) {
+            Optional<KpiDefinition> kpiOpt = kpiDefinitionRepository.findById(notification.getKpiDefinitionId());
+            if (kpiOpt.isEmpty()) {
+                // Self-healing: Clean up orphaned notification whose KPI was deleted
+                notificationRepository.delete(notification);
+                continue;
+            }
+            KpiDefinition kpi = kpiOpt.get();
+            if (kpi.isArchived()) {
+                // Suppress notifications for archived KPIs
+                notificationRepository.delete(notification);
+                continue;
+            }
+            responses.add(toResponse(notification, kpi));
+        }
+        return responses;
     }
 
     @Transactional(readOnly = true)
@@ -189,16 +207,16 @@ public class NotificationService {
         return user;
     }
 
-    private NotificationResponse toResponse(Notification notification) {
-        KpiDefinition kpi = loadKpiDefinition(notification.getKpiDefinitionId());
-
+    private NotificationResponse toResponse(Notification notification, KpiDefinition kpi) {
         NotificationResponse response = new NotificationResponse();
         response.setId(notification.getId());
         response.setKpiDefinitionId(notification.getKpiDefinitionId());
         response.setKpiName(kpi.getName());
         response.setOrganizationId(notification.getOrganizationId());
         response.setNotificationType(notification.getNotificationType());
-        response.setDaysBeforeDeadline(notification.getNotificationType().getDaysBeforeDeadline());
+        if (notification.getNotificationType() != null) {
+            response.setDaysBeforeDeadline(notification.getNotificationType().getDaysBeforeDeadline());
+        }
         response.setDeadline(kpi.getDeadline());
         response.setStatus(notification.getStatus());
         response.setMessage(notification.getMessage());

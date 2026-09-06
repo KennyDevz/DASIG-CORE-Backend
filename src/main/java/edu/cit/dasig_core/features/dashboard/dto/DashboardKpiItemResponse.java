@@ -21,4 +21,6 @@ public class DashboardKpiItemResponse {
     private String status;
     private ReportingFrequency reportingFrequency;
     private String reportingPeriod;
+    private String kpiStatus;
+    private boolean archived;
 }

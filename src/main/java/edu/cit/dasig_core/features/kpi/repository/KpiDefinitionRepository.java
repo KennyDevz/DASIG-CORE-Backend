@@ -10,4 +10,8 @@ import java.util.List;
 public interface KpiDefinitionRepository extends JpaRepository<KpiDefinition, Long> {
     List<KpiDefinition> findByCommitteeId(Long committeeId);
     List<KpiDefinition> findByCommittee_Organizations_Id(Long organizationId);
+
+    List<KpiDefinition> findByStatus(String status);
+
+    List<KpiDefinition> findByCommittee_Organizations_IdAndStatus(Long organizationId, String status);
 }

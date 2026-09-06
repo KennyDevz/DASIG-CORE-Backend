@@ -41,7 +41,7 @@ public class KpiAlertEvaluatorService {
         LocalDate now = today();
 
         for (KpiDefinition kpi : kpiDefinitions) {
-            if (kpi.getDeadline() == null) {
+            if (kpi.getDeadline() == null || kpi.isArchived()) {
                 continue;
             }
 
