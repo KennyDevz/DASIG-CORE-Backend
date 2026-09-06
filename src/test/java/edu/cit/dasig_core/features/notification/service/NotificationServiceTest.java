@@ -131,6 +131,49 @@ class NotificationServiceTest {
         assertThat(result.get(0).getOrganizationId()).isEqualTo(9L);
     }
 
+    @Test
+    void getAllNotifications_cleansUpOrphanedNotificationWhenKpiNotFound() {
+        User staff = staffUser(9L);
+        authenticateAs("staff@example.com");
+        when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
+
+        Notification notification = new Notification();
+        notification.setId(1L);
+        notification.setKpiDefinitionId(99L);
+        notification.setOrganizationId(9L);
+
+        when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
+        when(kpiDefinitionRepository.findById(99L)).thenReturn(Optional.empty());
+
+        List<NotificationResponse> result = notificationService.getAllNotifications();
+
+        assertThat(result).isEmpty();
+        verify(notificationRepository).delete(notification);
+    }
+
+    @Test
+    void getAllNotifications_suppressesNotificationsForArchivedKpis() {
+        User staff = staffUser(9L);
+        authenticateAs("staff@example.com");
+        when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
+
+        Notification notification = new Notification();
+        notification.setId(1L);
+        notification.setKpiDefinitionId(1L);
+        notification.setOrganizationId(9L);
+
+        KpiDefinition archivedKpi = kpiWithDeadline(LocalDate.now());
+        archivedKpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
+
+        when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(archivedKpi));
+
+        List<NotificationResponse> result = notificationService.getAllNotifications();
+
+        assertThat(result).isEmpty();
+        verify(notificationRepository).delete(notification);
+    }
+
     // ---- getNotificationById / markAsRead ----
 
     @Test

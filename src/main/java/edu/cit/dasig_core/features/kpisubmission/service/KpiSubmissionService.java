@@ -121,6 +121,10 @@ public class KpiSubmissionService {
                 user.getOrganizationId()
         );
 
+        if (kpiDefinition.isArchived()) {
+            throw new IllegalArgumentException("Cannot submit to an archived KPI.");
+        }
+
         SubmissionType submissionType = resolveSubmissionType(user);
 
         LocalDate assignmentStart = kpiDefinition.getDateCreated() != null

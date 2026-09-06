@@ -18,6 +18,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class KpiDefinition {
 
+    public static final String STATUS_ACTIVE = "ACTIVE";
+    public static final String STATUS_ARCHIVED = "ARCHIVED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,6 +30,13 @@ public class KpiDefinition {
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
+
+    @Column(name = "status", nullable = false)
+    private String status = STATUS_ACTIVE;
+
+    public boolean isArchived() {
+        return STATUS_ARCHIVED.equalsIgnoreCase(this.status);
+    }
 
     @Column(name = "target_value", nullable = false)
     private Double targetValue;

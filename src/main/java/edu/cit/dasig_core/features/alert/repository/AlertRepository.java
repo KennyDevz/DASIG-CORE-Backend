@@ -21,4 +21,8 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     List<Alert> findAllByOrderByDetectedAtDesc();
 
     List<Alert> findByKpiDefinitionId(Long kpiDefinitionId);
+
+    void deleteByKpiDefinitionId(Long kpiDefinitionId);
+
+    void deleteBySubmissionId(Long submissionId);
 }

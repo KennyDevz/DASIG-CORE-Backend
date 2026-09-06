@@ -19,4 +19,6 @@ public class KpiDefinitionResponse {
     private Long committeeId;
     private String committeeName;
     private ReportingFrequency reportingFrequency;
+    private String status;
+    private boolean archived;
 }

@@ -40,6 +40,22 @@ public class KpiDefinitionController {
         return ResponseEntity.ok(response);
     }
 
+    // ARCHIVE (Admin Only)
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
+    @PatchMapping("/{id}/archive")
+    public ResponseEntity<KpiDefinitionResponse> archiveKpiDefinition(@PathVariable Long id) {
+        KpiDefinitionResponse response = kpiDefinitionService.archiveKpiDefinition(id);
+        return ResponseEntity.ok(response);
+    }
+
+    // UNARCHIVE (Admin Only)
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
+    @PatchMapping("/{id}/unarchive")
+    public ResponseEntity<KpiDefinitionResponse> unarchiveKpiDefinition(@PathVariable Long id) {
+        KpiDefinitionResponse response = kpiDefinitionService.unarchiveKpiDefinition(id);
+        return ResponseEntity.ok(response);
+    }
+
     // DELETE (Admin Only)
     @PreAuthorize("hasRole('DASIG_ADMIN')")
     @DeleteMapping("/{id}")

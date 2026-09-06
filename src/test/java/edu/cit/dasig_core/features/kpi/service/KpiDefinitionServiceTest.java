@@ -8,6 +8,11 @@ import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.alert.repository.AlertRepository;
+import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
+import edu.cit.dasig_core.features.notification.repository.NotificationRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +38,28 @@ class KpiDefinitionServiceTest {
     private CommitteeRepository committeeRepository;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private NotificationRepository notificationRepository;
+    @Mock
+    private AlertRepository alertRepository;
+    @Mock
+    private KpiSubmissionRepository kpiSubmissionRepository;
+    @Mock
+    private SubmissionDocumentRepository submissionDocumentRepository;
 
     private KpiDefinitionService kpiDefinitionService;
 
     @BeforeEach
     void setUp() {
-        kpiDefinitionService = new KpiDefinitionService(kpiDefinitionRepository, committeeRepository, notificationService);
+        kpiDefinitionService = new KpiDefinitionService(
+                kpiDefinitionRepository,
+                committeeRepository,
+                notificationService,
+                notificationRepository,
+                alertRepository,
+                kpiSubmissionRepository,
+                submissionDocumentRepository
+        );
     }
 
     private CreateKpiDefinitionRequest createRequest() {
@@ -101,6 +122,54 @@ class KpiDefinitionServiceTest {
     }
 
     @Test
+    void updateKpiDefinition_updatesAndTriggersDeadlineNotificationsOnSuccess() {
+        Committee committee = new Committee();
+        committee.setId(1L);
+        committee.setName("Tech Committee");
+
+        KpiDefinition existingKpi = new KpiDefinition();
+        existingKpi.setId(1L);
+        existingKpi.setName("Old Name");
+        existingKpi.setDescription("Old Desc");
+        existingKpi.setTargetValue(500.0);
+        existingKpi.setUnit("USD");
+        existingKpi.setDeadline(LocalDate.now().plusMonths(3));
+        existingKpi.setThreshold(50.0);
+        existingKpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+        existingKpi.setCommittee(committee);
+
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(existingKpi));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateKpiDefinitionRequest request = new UpdateKpiDefinitionRequest();
+        request.setName("Updated Revenue");
+        request.setDescription("Updated description");
+        request.setTargetValue(2000.0);
+        request.setUnit("PHP");
+        LocalDate newDeadline = LocalDate.now().plusMonths(9);
+        request.setDeadline(newDeadline);
+        request.setThreshold(90.0);
+        request.setReportingFrequency(ReportingFrequency.QUARTERLY);
+
+        KpiDefinitionResponse response = kpiDefinitionService.updateKpiDefinition(1L, request);
+
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getName()).isEqualTo("Updated Revenue");
+        assertThat(response.getDescription()).isEqualTo("Updated description");
+        assertThat(response.getTargetValue()).isEqualTo(2000.0);
+        assertThat(response.getUnit()).isEqualTo("PHP");
+        assertThat(response.getDeadline()).isEqualTo(newDeadline);
+        assertThat(response.getThreshold()).isEqualTo(90.0);
+        assertThat(response.getReportingFrequency()).isEqualTo(ReportingFrequency.QUARTERLY);
+        assertThat(response.getCommitteeId()).isEqualTo(1L);
+        assertThat(response.getCommitteeName()).isEqualTo("Tech Committee");
+
+        verify(kpiDefinitionRepository).saveAndFlush(existingKpi);
+        verify(notificationService).createDeadlineNotificationsForKpi(existingKpi);
+    }
+
+
+    @Test
     void deleteKpiDefinition_throwsWhenNotFound() {
         when(kpiDefinitionRepository.existsById(1L)).thenReturn(false);
 
@@ -114,10 +183,49 @@ class KpiDefinitionServiceTest {
     @Test
     void deleteKpiDefinition_deletesWhenExists() {
         when(kpiDefinitionRepository.existsById(1L)).thenReturn(true);
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(10L);
+        when(kpiSubmissionRepository.findByKpiDefinitionId(1L)).thenReturn(List.of(submission));
 
         kpiDefinitionService.deleteKpiDefinition(1L);
 
+        verify(notificationRepository).deleteByKpiDefinitionId(1L);
+        verify(alertRepository).deleteByKpiDefinitionId(1L);
+        verify(alertRepository).deleteBySubmissionId(10L);
+        verify(submissionDocumentRepository).deleteBySubmissionId(10L);
+        verify(kpiSubmissionRepository).deleteAll(List.of(submission));
         verify(kpiDefinitionRepository).deleteById(1L);
+    }
+
+    @Test
+    void archiveKpiDefinition_setsArchivedAndCleansAlertsAndNotifications() {
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(1L);
+        kpi.setStatus(KpiDefinition.STATUS_ACTIVE);
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KpiDefinitionResponse response = kpiDefinitionService.archiveKpiDefinition(1L);
+
+        assertThat(response.getStatus()).isEqualTo(KpiDefinition.STATUS_ARCHIVED);
+        assertThat(response.isArchived()).isTrue();
+        verify(alertRepository).deleteByKpiDefinitionId(1L);
+        verify(notificationRepository).deleteByKpiDefinitionId(1L);
+    }
+
+    @Test
+    void unarchiveKpiDefinition_restoresActiveAndReEvaluatesNotifications() {
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(1L);
+        kpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        KpiDefinitionResponse response = kpiDefinitionService.unarchiveKpiDefinition(1L);
+
+        assertThat(response.getStatus()).isEqualTo(KpiDefinition.STATUS_ACTIVE);
+        assertThat(response.isArchived()).isFalse();
+        verify(notificationService).createDeadlineNotificationsForKpi(any(KpiDefinition.class));
     }
 
     @Test

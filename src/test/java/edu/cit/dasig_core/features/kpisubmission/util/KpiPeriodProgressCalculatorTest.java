@@ -32,10 +32,13 @@ class KpiPeriodProgressCalculatorTest {
                 submission("Q3 2026", 15.0)
         ), 50.0);
 
-        assertProgress(q1, 25.0, 20.0, 35.0, 140.0, PerformanceStatusClassifier.GREEN);
-        assertProgress(q2, 50.0, 40.0, 39.0, 78.0, PerformanceStatusClassifier.RED);
-        assertProgress(q3, 75.0, 60.0, 54.0, 72.0, PerformanceStatusClassifier.RED);
-        assertProgress(q4, 100.0, 80.0, 104.0, 104.0, PerformanceStatusClassifier.GREEN);
+        // expectedThreshold now equals expectedTarget (threshold % is no longer applied per-period).
+        // performanceStatus is now deadline-and-goal-driven: GREEN unless deadline passed or ≤60 days with <50% progress.
+        // Deadline 2026-12-31 is ~117 days away from test date, so all mid-year periods show GREEN.
+        assertProgress(q1, 25.0, 25.0, 35.0, 140.0, PerformanceStatusClassifier.GREEN);
+        assertProgress(q2, 50.0, 50.0, 39.0, 78.0, PerformanceStatusClassifier.GREEN);
+        assertProgress(q3, 75.0, 75.0, 54.0, 72.0, PerformanceStatusClassifier.GREEN);
+        assertProgress(q4, 100.0, 100.0, 104.0, 104.0, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -47,7 +50,8 @@ class KpiPeriodProgressCalculatorTest {
                 submission("Feb 2026", 8.0)
         ), 8.0);
 
-        assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
+        // expectedThreshold = expectedTarget (30.0). Deadline far away → GREEN, not YELLOW.
+        assertProgress(progress, 30.0, 30.0, 24.0, 80.0, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -56,7 +60,8 @@ class KpiPeriodProgressCalculatorTest {
 
         KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(kpi, "Q1 2026", List.of(), 100.0);
 
-        assertProgress(progress, 150.0, 120.0, 100.0, 66.67, PerformanceStatusClassifier.RED);
+        // expectedThreshold = expectedTarget (150.0). Deadline far away → GREEN, not RED.
+        assertProgress(progress, 150.0, 150.0, 100.0, 66.67, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -70,7 +75,8 @@ class KpiPeriodProgressCalculatorTest {
                 submission("Mar 2026", 3.0)
         ));
 
-        assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
+        // expectedThreshold = expectedTarget (30.0). Deadline far away → GREEN, not YELLOW.
+        assertProgress(progress, 30.0, 30.0, 24.0, 80.0, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -83,7 +89,8 @@ class KpiPeriodProgressCalculatorTest {
                 submission("Mar 2026", 5.0)
         ), 3.0);
 
-        assertProgress(progress, 30.0, 24.0, 24.0, 80.0, PerformanceStatusClassifier.YELLOW);
+        // expectedThreshold = expectedTarget (30.0). Deadline far away → GREEN, not YELLOW.
+        assertProgress(progress, 30.0, 30.0, 24.0, 80.0, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -92,7 +99,8 @@ class KpiPeriodProgressCalculatorTest {
 
         KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculate(kpi, "2026", List.of(), 79.0);
 
-        assertProgress(progress, 100.0, 80.0, 79.0, 79.0, PerformanceStatusClassifier.RED);
+        // expectedThreshold = expectedTarget (100.0). Deadline far away, 79% progress → GREEN, not RED.
+        assertProgress(progress, 100.0, 100.0, 79.0, 79.0, PerformanceStatusClassifier.GREEN);
     }
 
     @Test
@@ -106,7 +114,8 @@ class KpiPeriodProgressCalculatorTest {
                 100.0
         );
 
-        assertProgress(progress, 100.0, 80.0, 100.0, 100.0, PerformanceStatusClassifier.GREEN);
+        // expectedThreshold = expectedTarget (100.0). cumulative=100 meets target → GREEN.
+        assertProgress(progress, 100.0, 100.0, 100.0, 100.0, PerformanceStatusClassifier.GREEN);
     }
 
     private static KpiDefinition kpiDefinition(ReportingFrequency frequency, double target, double threshold) {

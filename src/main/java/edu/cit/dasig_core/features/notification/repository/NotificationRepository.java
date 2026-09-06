@@ -13,4 +13,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     boolean existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(Long kpiDefinitionId, Long organizationId, NotificationType notificationType);
 
     List<Notification> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
+
+    void deleteByKpiDefinitionId(Long kpiDefinitionId);
 }

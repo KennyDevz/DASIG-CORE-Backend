@@ -18,4 +18,6 @@ public class KpiPeriodHistoryResponse {
     private String currentPeriod;
     private String organization;
     private List<KpiPeriodHistoryItemResponse> periods;
+    private String kpiStatus;
+    private boolean archived;
 }

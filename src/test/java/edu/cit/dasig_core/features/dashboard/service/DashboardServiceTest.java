@@ -130,6 +130,31 @@ class DashboardServiceTest {
     }
 
     @Test
+    void getDashboardForCurrentUser_populatesArchivedAndKpiStatus() {
+        User admin = user("DASIG_ADMIN", null);
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(admin));
+
+        KpiDefinition activeKpi = kpi(1L, 5L);
+        activeKpi.setStatus(KpiDefinition.STATUS_ACTIVE);
+
+        KpiDefinition archivedKpi = kpi(2L, 6L);
+        archivedKpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
+
+        when(kpiDefinitionRepository.findAll()).thenReturn(List.of(activeKpi, archivedKpi));
+        when(kpiSubmissionRepository.findByKpiDefinitionId(any())).thenReturn(List.of());
+
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null);
+
+        assertThat(response.getKpis()).hasSize(2);
+        assertThat(response.getKpis().get(0).isArchived()).isFalse();
+        assertThat(response.getKpis().get(0).getKpiStatus()).isEqualTo("ACTIVE");
+
+        assertThat(response.getKpis().get(1).isArchived()).isTrue();
+        assertThat(response.getKpis().get(1).getKpiStatus()).isEqualTo("ARCHIVED");
+    }
+
+    @Test
     void getDashboardForCurrentUser_staffSeesOnlyCommitteeScopedKpis() {
         User staff = user("STAFF", 9L);
         authenticateAs("user@example.com");

@@ -30,7 +30,10 @@ public class KpiAssignmentService {
             throw new IllegalArgumentException("Organization is required.");
         }
 
-        return kpiAssignmentRepository.findByCommittee_Organizations_Id(organizationId);
+        return kpiAssignmentRepository.findByCommittee_Organizations_Id(organizationId)
+                .stream()
+                .filter(kpi -> !kpi.isArchived())
+                .toList();
     }
 
     public void validateAssignment(Long kpiDefinitionId, Long organizationId) {
