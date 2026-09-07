@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class ReportResponse {
@@ -19,4 +20,7 @@ public class ReportResponse {
     private String narrativeText;
     private String status;
     private LocalDateTime generatedAt;
+    // Null/empty for reports generated before per-section citations were introduced —
+    // the frontend falls back to rendering narrativeText as flat markdown in that case.
+    private List<ReportSectionDto> sections;
 }

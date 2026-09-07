@@ -45,6 +45,11 @@ public class Report {
     @Column(name = "narrative_text", columnDefinition = "TEXT", nullable = false)
     private String narrativeText;
 
+    // Structured per-section data (heading/text/resolved source citations), serialized as JSON.
+    // Null for reports generated before per-section citations were introduced.
+    @Column(name = "sections_json", columnDefinition = "TEXT")
+    private String sectionsJson;
+
     @Column(nullable = false)
     private String status; // GENERATED, FAILED
 
