@@ -4,6 +4,8 @@ import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -42,4 +44,9 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
     );
 
     boolean existsBySourceSubmissionId(Long sourceSubmissionId);
+    @Query("SELECT s FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds ORDER BY s.dateCreated DESC")
+    List<KpiSubmission> findByCommitteeIdsOrderByDateCreatedDesc(@Param("committeeIds") List<Long> committeeIds);
+
+    @Query("SELECT s.kpiDefinition.committee.id, COUNT(s) FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds AND s.reviewStatus = edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus.PENDING GROUP BY s.kpiDefinition.committee.id")
+    List<Object[]> countPendingSubmissionsByCommitteeIds(@Param("committeeIds") List<Long> committeeIds);
 }

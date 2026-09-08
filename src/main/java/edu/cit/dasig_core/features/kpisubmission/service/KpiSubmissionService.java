@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.kpisubmission.service;
 
 import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
+import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
@@ -77,9 +78,19 @@ public class KpiSubmissionService {
         User user = resolveCurrentUser();
         validateSubmitterRole(user);
 
-        return kpiSubmissionRepository
-                .findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId())
-                .stream()
+        List<KpiSubmission> submissions;
+        if ("TBI_MANAGER".equals(user.getRole())) {
+            List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
+            if (assignedCommittees.isEmpty()) {
+                return List.of();
+            }
+            List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
+            submissions = kpiSubmissionRepository.findByCommitteeIdsOrderByDateCreatedDesc(assignedCommitteeIds);
+        } else {
+            submissions = kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId());
+        }
+
+        return submissions.stream()
                 .filter(submission -> matchesRoleVisibility(user, submission, submissionType))
                 .filter(submission -> kpiDefinitionId == null
                         || submission.getKpiDefinition().getId().equals(kpiDefinitionId))
@@ -196,7 +207,13 @@ public class KpiSubmissionService {
         KpiSubmission submission = kpiSubmissionRepository.findById(submissionId)
                 .orElseThrow(() -> new IllegalArgumentException("Submission not found."));
 
-        if (!user.getOrganizationId().equals(submission.getOrganization().getId())) {
+        boolean isLeadOfCommittee = submission.getKpiDefinition() != null
+                && submission.getKpiDefinition().getCommittee() != null
+                && user.getCommittees() != null
+                && user.getCommittees().stream()
+                        .anyMatch(c -> c.getId().equals(submission.getKpiDefinition().getCommittee().getId()));
+
+        if (!isLeadOfCommittee && !user.getOrganizationId().equals(submission.getOrganization().getId())) {
             throw new IllegalArgumentException("You do not have access to review this submission.");
         }
 
@@ -250,7 +267,14 @@ public class KpiSubmissionService {
                 .orElseThrow(() -> new IllegalArgumentException("Submission document not found."));
         KpiSubmission submission = document.getSubmission();
 
-        if (!user.getOrganizationId().equals(submission.getOrganization().getId())) {
+        boolean isLeadOfCommittee = "TBI_MANAGER".equals(user.getRole())
+                && submission.getKpiDefinition() != null
+                && submission.getKpiDefinition().getCommittee() != null
+                && user.getCommittees() != null
+                && user.getCommittees().stream()
+                        .anyMatch(c -> c.getId().equals(submission.getKpiDefinition().getCommittee().getId()));
+
+        if (!isLeadOfCommittee && !user.getOrganizationId().equals(submission.getOrganization().getId())) {
             throw new IllegalArgumentException("You do not have access to this document.");
         }
 
@@ -286,6 +310,10 @@ public class KpiSubmissionService {
         response.setReviewedAt(submission.getReviewedAt());
         response.setSourceSubmissionId(submission.getSourceSubmission() != null ? submission.getSourceSubmission().getId() : null);
         response.setCreatedAt(submission.getDateCreated());
+        if (submission.getOrganization() != null) {
+            response.setOrganizationId(submission.getOrganization().getId());
+            response.setOrganizationName(submission.getOrganization().getName());
+        }
         response.setDocuments(submissionDocumentRepository.findBySubmissionId(submission.getId())
                 .stream()
                 .map(this::toDocumentResponse)

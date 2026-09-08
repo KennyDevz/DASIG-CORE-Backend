@@ -23,4 +23,6 @@ public class DashboardKpiItemResponse {
     private String reportingPeriod;
     private String kpiStatus;
     private boolean archived;
+    private Long committeeId;
+    private String committeeName;
 }

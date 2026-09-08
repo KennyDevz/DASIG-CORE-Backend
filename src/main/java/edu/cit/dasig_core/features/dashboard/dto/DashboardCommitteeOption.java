@@ -8,4 +8,6 @@ public class DashboardCommitteeOption {
     private String name;
     private String organizationName;
     private boolean current;
+    private boolean hasPendingSubmissions;
+    private int pendingSubmissionsCount;
 }

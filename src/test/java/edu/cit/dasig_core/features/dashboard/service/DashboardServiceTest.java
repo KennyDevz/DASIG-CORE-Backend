@@ -195,4 +195,77 @@ class DashboardServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("You do not have access to this KPI.");
     }
+
+    @Test
+    void getDashboardForCurrentUser_tbiManagerSeesOnlyAssignedCommitteeKpis() {
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(5L);
+        assigned.setName("Assigned Committee");
+        assigned.setStatus("Active");
+        manager.setCommittees(List.of(assigned));
+
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
+        when(kpiDefinitionRepository.findByCommittee_Organizations_Id(9L))
+                .thenReturn(List.of(kpi(1L, 5L), kpi(2L, 6L)));
+        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
+                .thenReturn(List.of());
+
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
+
+        assertThat(response.getKpis()).hasSize(1);
+        assertThat(response.getKpis().get(0).getId()).isEqualTo(1L);
+        assertThat(response.getCommittees()).hasSize(1);
+        assertThat(response.getCommittees().get(0).getId()).isEqualTo(5L);
+    }
+
+    @Test
+    void getDashboardForCurrentUser_tbiManagerWithNoAssignedCommitteesReceivesEmptyDashboard() {
+        User manager = user("TBI_MANAGER", 9L);
+        manager.setCommittees(List.of());
+
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
+
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
+
+        assertThat(response.getKpis()).isEmpty();
+        assertThat(response.getCommittees()).isEmpty();
+        assertThat(response.getCommitteeName()).isNull();
+    }
+
+    @Test
+    void getDashboardForCurrentUser_tbiManagerCannotAccessUnassignedCommittee() {
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(5L);
+        assigned.setName("Assigned Committee");
+        assigned.setStatus("Active");
+        manager.setCommittees(List.of(assigned));
+
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
+
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, 999L);
+
+        assertThat(response.getKpis()).isEmpty();
+        assertThat(response.getCommitteeName()).isNull();
+    }
+
+    @Test
+    void getKpiPeriodHistory_throwsWhenTbiManagerNotAssignedToKpiCommittee() {
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(5L);
+        manager.setCommittees(List.of(assigned));
+
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi(1L, 999L)));
+
+        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("You do not have access to this KPI.");
+    }
 }
