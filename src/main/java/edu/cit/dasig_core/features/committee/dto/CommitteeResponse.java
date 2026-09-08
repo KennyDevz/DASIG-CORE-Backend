@@ -12,5 +12,6 @@ public class CommitteeResponse {
     private String description;
     private String status;
     private List<Long> organizationIds;
+    private List<Long> committeeLeadIds;
 
 }
