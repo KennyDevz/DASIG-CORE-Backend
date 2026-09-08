@@ -104,26 +104,6 @@ class OrganizationServiceTest {
     }
 
     @Test
-    void updateOrganization_clearsCommitteeWhenCommitteeIdIsNull() {
-        Organization org = new Organization();
-        org.setId(1L);
-        org.setName("Old Name");
-        when(organizationRepository.findById(1L)).thenReturn(Optional.of(org));
-        when(organizationRepository.existsByNameAndIdNot("New Name", 1L)).thenReturn(false);
-        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        UpdateOrganizationRequest request = new UpdateOrganizationRequest();
-        request.setName("New Name");
-        request.setAddress("Addr");
-        request.setContactEmail("a@example.com");
-        request.setCommitteeId(null);
-
-        OrganizationResponse response = organizationService.updateOrganization(1L, request);
-
-        assertThat(response.getCommitteeId()).isNull();
-    }
-
-    @Test
     void deactivateOrganization_throwsWhenNotFound() {
         when(organizationRepository.findById(1L)).thenReturn(Optional.empty());
 

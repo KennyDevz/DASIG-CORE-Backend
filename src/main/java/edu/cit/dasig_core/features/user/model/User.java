@@ -7,6 +7,10 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+import edu.cit.dasig_core.features.committee.model.Committee;
 
 @Entity
 @Table(name = "users")
@@ -43,5 +47,13 @@ public class User {
 
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword = true;
+
+    @ManyToMany
+    @JoinTable(
+            name = "users_committees",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "committee_id")
+    )
+    private List<Committee> committees = new ArrayList<>();
 
 }

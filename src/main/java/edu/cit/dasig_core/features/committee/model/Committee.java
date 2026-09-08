@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import edu.cit.dasig_core.features.organization.model.Organization;
+import edu.cit.dasig_core.features.user.model.User;
 
 @Entity
 @Table(name = "committees")
@@ -32,8 +33,16 @@ public class Committee {
     @Column(nullable = false)
     private String status = "Active";
 
-    @OneToMany(mappedBy = "committee", cascade = CascadeType.ALL)
+    @ManyToMany
+    @JoinTable(
+            name = "committees_organizations",
+            joinColumns = @JoinColumn(name = "committee_id"),
+            inverseJoinColumns = @JoinColumn(name = "organization_id")
+    )
     private List<Organization> organizations = new ArrayList<>();
+
+    @ManyToMany(mappedBy = "committees")
+    private List<User> users = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

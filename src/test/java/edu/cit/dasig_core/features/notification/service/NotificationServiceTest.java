@@ -248,8 +248,8 @@ class NotificationServiceTest {
         KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(7));
         Organization org = new Organization();
         org.setId(9L);
+        kpi.getCommittee().setOrganizations(List.of(org));
 
-        when(organizationRepository.findByCommitteeId(5L)).thenReturn(List.of(org));
         when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(
                 1L, 9L, NotificationType.SEVEN_DAYS_BEFORE)).thenReturn(false);
 
@@ -266,8 +266,8 @@ class NotificationServiceTest {
         KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(7));
         Organization org = new Organization();
         org.setId(9L);
+        kpi.getCommittee().setOrganizations(List.of(org));
 
-        when(organizationRepository.findByCommitteeId(5L)).thenReturn(List.of(org));
         when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(
                 1L, 9L, NotificationType.SEVEN_DAYS_BEFORE)).thenReturn(true);
 

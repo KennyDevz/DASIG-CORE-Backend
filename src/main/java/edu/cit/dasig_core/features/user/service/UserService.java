@@ -16,6 +16,8 @@ import edu.cit.dasig_core.features.user.dto.UpdateUserRequest;
 import edu.cit.dasig_core.features.user.dto.UserResponse;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
+import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final CommitteeRepository committeeRepository;
 
     @Transactional
     public UserResponse registerUser(CreateUserRequest request) {
@@ -54,6 +57,13 @@ public class UserService {
         // 5. Save to database
         User savedUser = userRepository.save(user);
 
+        // 6. Assign committees for Committee Lead users
+        if ("TBI_MANAGER".equals(savedUser.getRole()) && request.getCommitteeIds() != null && !request.getCommitteeIds().isEmpty()) {
+            List<Committee> committees = committeeRepository.findAllById(request.getCommitteeIds());
+            savedUser.setCommittees(committees);
+            userRepository.save(savedUser);
+        }
+
         eventPublisher.publishEvent(new UserCreatedEvent(savedUser.getEmail(), savedUser.getName(), tempPassword, savedUser.getRole()));
         return mapToResponse(savedUser);
     }
@@ -74,6 +84,13 @@ public class UserService {
         user.setEmail(request.getEmail());
         user.setRole(request.getRole());
         user.setOrganizationId(request.getOrganizationId());
+
+        if ("TBI_MANAGER".equals(request.getRole()) && request.getCommitteeIds() != null && !request.getCommitteeIds().isEmpty()) {
+            List<Committee> committees = committeeRepository.findAllById(request.getCommitteeIds());
+            user.setCommittees(committees);
+        } else {
+            user.getCommittees().clear();
+        }
 
         User updatedUser = userRepository.save(user);
         return mapToResponse(updatedUser);
@@ -141,6 +158,11 @@ public class UserService {
         response.setRole(user.getRole());
         response.setStatus(user.getStatus());
         response.setOrganizationId(user.getOrganizationId());
+        response.setCommitteeIds(
+                user.getCommittees().stream()
+                        .map(Committee::getId)
+                        .collect(Collectors.toList())
+        );
         return response;
     }
 

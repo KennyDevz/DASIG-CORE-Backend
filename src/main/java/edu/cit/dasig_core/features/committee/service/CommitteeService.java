@@ -38,14 +38,7 @@ public class CommitteeService {
 
         if (request.getOrganizationIds() != null && !request.getOrganizationIds().isEmpty()) {
             List<Organization> orgs = organizationRepository.findAllById(request.getOrganizationIds());
-            for (Organization org : orgs) {
-                if (org.getCommittee() != null) {
-                    org.getCommittee().getOrganizations().remove(org);
-                }
-                org.setCommittee(committee);
-                committee.getOrganizations().add(org);
-            }
-            organizationRepository.saveAll(orgs);
+            committee.getOrganizations().addAll(orgs);
         }
 
         Committee savedCommittee = committeeRepository.save(committee);
@@ -63,24 +56,11 @@ public class CommitteeService {
 
         committee.setName(request.getName());
         committee.setDescription(request.getDescription());
-
-        List<Organization> previouslyAssigned = new java.util.ArrayList<>(committee.getOrganizations());
-        for (Organization org : previouslyAssigned) {
-            org.setCommittee(null);
-            organizationRepository.save(org);
-        }
         committee.getOrganizations().clear();
 
         if (request.getOrganizationIds() != null && !request.getOrganizationIds().isEmpty()) {
             List<Organization> orgs = organizationRepository.findAllById(request.getOrganizationIds());
-            for (Organization org : orgs) {
-                if (org.getCommittee() != null && !org.getCommittee().getId().equals(id)) {
-                    org.getCommittee().getOrganizations().remove(org);
-                }
-                org.setCommittee(committee);
-                committee.getOrganizations().add(org);
-            }
-            organizationRepository.saveAll(orgs);
+            committee.getOrganizations().addAll(orgs);
         }
 
         Committee updatedCommittee = committeeRepository.save(committee);
