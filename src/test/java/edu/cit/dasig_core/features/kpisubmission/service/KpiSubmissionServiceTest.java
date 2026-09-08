@@ -524,4 +524,72 @@ class KpiSubmissionServiceTest {
         assertThat(download.fileName()).isEqualTo("report.pdf");
         assertThat(download.content()).containsExactly(1, 2, 3);
     }
+
+    @Test
+    void getSubmissionsForCurrentUser_tbiManagerCanSeePendingSubmissionsFromOtherOrganization() {
+        authenticateAs("lead@example.com");
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(1L);
+        manager.setCommittees(List.of(assigned));
+        when(userRepository.findByEmail("lead@example.com")).thenReturn(Optional.of(manager));
+
+        KpiSubmission otherOrgSubmission = internalPendingSubmission(999L);
+        otherOrgSubmission.setId(500L);
+        when(kpiSubmissionRepository.findByCommitteeIdsOrderByDateCreatedDesc(List.of(1L)))
+                .thenReturn(List.of(otherOrgSubmission));
+        when(submissionDocumentRepository.findBySubmissionId(500L)).thenReturn(List.of());
+
+        List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
+                null, null, null, null);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(500L);
+    }
+
+    @Test
+    void reviewSubmission_tbiManagerCanReviewSubmissionFromDifferentOrganization() {
+        authenticateAs("lead@example.com");
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(1L);
+        manager.setCommittees(List.of(assigned));
+        when(userRepository.findByEmail("lead@example.com")).thenReturn(Optional.of(manager));
+
+        KpiSubmission submission = internalPendingSubmission(999L);
+        when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
+        when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(true);
+        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+
+        ReviewKpiSubmissionRequest request = new ReviewKpiSubmissionRequest();
+        request.setReviewStatus(SubmissionReviewStatus.APPROVED);
+
+        KpiSubmissionResponse response = kpiSubmissionService.reviewSubmission(1L, request);
+
+        assertThat(response.getReviewStatus()).isEqualTo(SubmissionReviewStatus.APPROVED);
+    }
+
+    @Test
+    void getDocumentForCurrentUser_tbiManagerCanDownloadDocumentFromDifferentOrganization() {
+        authenticateAs("lead@example.com");
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(1L);
+        manager.setCommittees(List.of(assigned));
+        when(userRepository.findByEmail("lead@example.com")).thenReturn(Optional.of(manager));
+
+        SubmissionDocument document = new SubmissionDocument();
+        document.setId(1L);
+        document.setFileName("report.pdf");
+        document.setContentType("application/pdf");
+        document.setSubmission(internalPendingSubmission(999L));
+        when(submissionDocumentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(submissionDocumentService.downloadDocument(document)).thenReturn(new byte[]{1, 2, 3});
+
+        KpiSubmissionService.SubmissionDocumentDownload download = kpiSubmissionService.getDocumentForCurrentUser(1L);
+
+        assertThat(download.fileName()).isEqualTo("report.pdf");
+        assertThat(download.content()).containsExactly(1, 2, 3);
+    }
 }

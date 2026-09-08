@@ -161,6 +161,16 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
+        if ("TBI_MANAGER".equals(user.getRole())) {
+            boolean isAssigned = kpiDefinition.getCommittee() != null &&
+                    user.getCommittees() != null &&
+                    user.getCommittees().stream().anyMatch(c -> c.getId().equals(kpiDefinition.getCommittee().getId()));
+            if (!isAssigned) {
+                throw new IllegalArgumentException("You do not have access to this KPI.");
+            }
+            return;
+        }
+
         boolean hasAccess = kpiDefinition.getCommittee() != null &&
                 kpiDefinition.getCommittee().getOrganizations().stream()
                         .anyMatch(org -> org.getId().equals(user.getOrganizationId()));
@@ -179,6 +189,31 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
+        if ("TBI_MANAGER".equals(user.getRole())) {
+            List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
+            if (assignedCommittees.isEmpty()) {
+                return List.of();
+            }
+
+            if (committeeId != null) {
+                boolean isAssigned = assignedCommittees.stream().anyMatch(c -> c.getId().equals(committeeId));
+                if (!isAssigned) {
+                    return List.of();
+                }
+                return kpiDefinitionRepository.findByCommitteeId(committeeId)
+                        .stream()
+                        .filter(kpi -> !kpi.isArchived())
+                        .toList();
+            }
+
+            List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
+            return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId())
+                    .stream()
+                    .filter(kpi -> !kpi.isArchived())
+                    .filter(kpi -> kpi.getCommittee() != null && assignedCommitteeIds.contains(kpi.getCommittee().getId()))
+                    .toList();
+        }
+
         if (committeeId != null) {
             return kpiDefinitionRepository.findByCommitteeId(committeeId)
                     .stream()
@@ -195,6 +230,34 @@ public class DashboardService {
     private List<DashboardCommitteeOption> resolveCommitteeOptions(User user, Long selectedCommitteeId) {
         if (user.getOrganizationId() == null) {
             return List.of();
+        }
+
+        if ("TBI_MANAGER".equals(user.getRole())) {
+            List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
+            if (assignedCommittees.isEmpty()) {
+                return List.of();
+            }
+
+            List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
+            Map<Long, Integer> pendingCounts = kpiSubmissionRepository.countPendingSubmissionsByCommitteeIds(assignedCommitteeIds).stream()
+                    .collect(Collectors.toMap(
+                            row -> (Long) row[0],
+                            row -> ((Number) row[1]).intValue()
+                    ));
+
+            return assignedCommittees.stream()
+                    .filter(c -> c.getStatus() == null || "Active".equalsIgnoreCase(c.getStatus()))
+                    .map(c -> {
+                        DashboardCommitteeOption option = new DashboardCommitteeOption();
+                        option.setId(c.getId());
+                        option.setName(c.getName());
+                        option.setCurrent(selectedCommitteeId != null && selectedCommitteeId.equals(c.getId()));
+                        int pendingCount = pendingCounts.getOrDefault(c.getId(), 0);
+                        option.setPendingSubmissionsCount(pendingCount);
+                        option.setHasPendingSubmissions(pendingCount > 0);
+                        return option;
+                    })
+                    .toList();
         }
 
         Organization org = organizationRepository.findById(user.getOrganizationId()).orElse(null);
@@ -217,17 +280,18 @@ public class DashboardService {
 
     private String resolveCommitteeName(User user, Long committeeId) {
         if (committeeId != null) {
+            if ("TBI_MANAGER".equals(user.getRole())) {
+                List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
+                boolean isAssigned = assignedCommittees.stream().anyMatch(c -> c.getId().equals(committeeId));
+                if (!isAssigned) {
+                    return null;
+                }
+            }
             return committeeRepository.findById(committeeId)
                     .map(Committee::getName)
                     .orElse(null);
         }
-        if (user.getOrganizationId() == null) {
-            return null;
-        }
-
-        return organizationRepository.findById(user.getOrganizationId())
-                .map(org -> !org.getCommittees().isEmpty() ? org.getCommittees().get(0).getName() : null)
-                .orElse(null);
+        return null;
     }
 
     private DashboardKpiItemResponse toDashboardKpiItem(
@@ -277,7 +341,11 @@ public class DashboardService {
         item.setSubmittedValue(submittedValue);
         item.setUnit(kpiDefinition.getUnit());
         item.setDeadline(kpiDefinition.getDeadline());
-        item.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
+        if (kpiDefinition.getCommittee() != null) {
+            item.setOrganization(kpiDefinition.getCommittee().getName());
+            item.setCommitteeId(kpiDefinition.getCommittee().getId());
+            item.setCommitteeName(kpiDefinition.getCommittee().getName());
+        }
         item.setAchievementRate(achievementRate);
         item.setStatus(mapStatus(performanceStatus, submittedValue, kpiDefinition.getTargetValue()));
         item.setReportingFrequency(kpiDefinition.getReportingFrequency());

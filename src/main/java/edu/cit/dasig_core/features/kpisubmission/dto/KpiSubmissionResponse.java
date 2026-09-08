@@ -27,6 +27,8 @@ public class KpiSubmissionResponse {
     private String reviewedByName;
     private LocalDateTime reviewedAt;
     private Long sourceSubmissionId;
+    private Long organizationId;
+    private String organizationName;
     private List<SubmissionDocumentResponse> documents;
     private LocalDateTime createdAt;
 }
