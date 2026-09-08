@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.dashboard.service;
 
 import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.dashboard.dto.DashboardResponse;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
@@ -37,13 +38,15 @@ class DashboardServiceTest {
     private KpiSubmissionRepository kpiSubmissionRepository;
     @Mock
     private OrganizationRepository organizationRepository;
+    @Mock
+    private CommitteeRepository committeeRepository;
 
     private DashboardService dashboardService;
 
     @BeforeEach
     void setUp() {
         dashboardService = new DashboardService(
-                userRepository, kpiDefinitionRepository, kpiSubmissionRepository, organizationRepository);
+                userRepository, kpiDefinitionRepository, kpiSubmissionRepository, organizationRepository, committeeRepository);
     }
 
     @AfterEach
@@ -86,7 +89,7 @@ class DashboardServiceTest {
 
     @Test
     void getDashboardForCurrentUser_throwsWhenNotAuthenticated() {
-        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null))
+        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Authentication is required.");
     }
@@ -98,7 +101,7 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(inactive));
 
-        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null))
+        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Account is not active.");
     }
@@ -109,7 +112,7 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(staff));
 
-        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null))
+        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Organization is required for this role.");
     }
@@ -122,7 +125,7 @@ class DashboardServiceTest {
         when(kpiDefinitionRepository.findAll()).thenReturn(List.of(kpi(1L, 5L), kpi(2L, 6L)));
         when(kpiSubmissionRepository.findByKpiDefinitionId(any())).thenReturn(List.of());
 
-        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null);
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 
         assertThat(response.getKpis()).hasSize(2);
         assertThat(response.getRole()).isEqualTo("DASIG_ADMIN");
@@ -143,7 +146,7 @@ class DashboardServiceTest {
         when(kpiDefinitionRepository.findAll()).thenReturn(List.of(activeKpi, archivedKpi));
         when(kpiSubmissionRepository.findByKpiDefinitionId(any())).thenReturn(List.of());
 
-        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null);
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 
         assertThat(response.getKpis()).hasSize(2);
         assertThat(response.getKpis().get(0).isArchived()).isFalse();
@@ -163,7 +166,7 @@ class DashboardServiceTest {
                 .thenReturn(List.of());
         when(organizationRepository.findById(9L)).thenReturn(Optional.empty());
 
-        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null);
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 
         assertThat(response.getKpis()).hasSize(1);
         assertThat(response.getOrganizationId()).isEqualTo(9L);
