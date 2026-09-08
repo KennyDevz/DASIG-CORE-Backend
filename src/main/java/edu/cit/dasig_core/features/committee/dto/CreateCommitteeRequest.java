@@ -15,4 +15,6 @@ public class CreateCommitteeRequest {
 
     private List<Long> organizationIds;
 
+    private List<Long> committeeLeadIds;
+
 }

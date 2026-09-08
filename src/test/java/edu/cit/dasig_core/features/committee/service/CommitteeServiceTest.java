@@ -7,6 +7,8 @@ import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
+import edu.cit.dasig_core.features.user.model.User;
+import edu.cit.dasig_core.features.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,11 +33,14 @@ class CommitteeServiceTest {
     @Mock
     private OrganizationRepository organizationRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     private CommitteeService committeeService;
 
     @BeforeEach
     void setUp() {
-        committeeService = new CommitteeService(committeeRepository, organizationRepository);
+        committeeService = new CommitteeService(committeeRepository, organizationRepository, userRepository);
     }
 
     private Organization organization(Long id) {
@@ -43,6 +48,14 @@ class CommitteeServiceTest {
         org.setId(id);
         org.setName("Org " + id);
         return org;
+    }
+
+    private User user(Long id) {
+        User user = new User();
+        user.setId(id);
+        user.setName("User " + id);
+        user.setEmail("user" + id + "@example.com");
+        return user;
     }
 
     @Test

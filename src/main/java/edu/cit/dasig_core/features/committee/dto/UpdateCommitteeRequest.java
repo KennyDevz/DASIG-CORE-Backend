@@ -15,4 +15,6 @@ public class UpdateCommitteeRequest {
 
     private List<Long> organizationIds;
 
+    private List<Long> committeeLeadIds;
+
 }

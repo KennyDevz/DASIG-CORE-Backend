@@ -10,6 +10,8 @@ import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
+import edu.cit.dasig_core.features.user.model.User;
+import edu.cit.dasig_core.features.user.repository.UserRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,10 +21,12 @@ public class CommitteeService {
 
     private final CommitteeRepository committeeRepository;
     private final OrganizationRepository organizationRepository;
+    private final UserRepository userRepository;
 
-    public CommitteeService(CommitteeRepository committeeRepository, OrganizationRepository organizationRepository) {
+    public CommitteeService(CommitteeRepository committeeRepository, OrganizationRepository organizationRepository, UserRepository userRepository) {
         this.committeeRepository = committeeRepository;
         this.organizationRepository = organizationRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
@@ -39,6 +43,11 @@ public class CommitteeService {
         if (request.getOrganizationIds() != null && !request.getOrganizationIds().isEmpty()) {
             List<Organization> orgs = organizationRepository.findAllById(request.getOrganizationIds());
             committee.getOrganizations().addAll(orgs);
+        }
+
+        if (request.getCommitteeLeadIds() != null && !request.getCommitteeLeadIds().isEmpty()) {
+            List<User> users = userRepository.findAllById(request.getCommitteeLeadIds());
+            committee.getUsers().addAll(users);
         }
 
         Committee savedCommittee = committeeRepository.save(committee);
@@ -61,6 +70,14 @@ public class CommitteeService {
         if (request.getOrganizationIds() != null && !request.getOrganizationIds().isEmpty()) {
             List<Organization> orgs = organizationRepository.findAllById(request.getOrganizationIds());
             committee.getOrganizations().addAll(orgs);
+        }
+
+        if (request.getCommitteeLeadIds() != null) {
+            committee.getUsers().clear();
+            if (!request.getCommitteeLeadIds().isEmpty()) {
+                List<User> users = userRepository.findAllById(request.getCommitteeLeadIds());
+                committee.getUsers().addAll(users);
+            }
         }
 
         Committee updatedCommittee = committeeRepository.save(committee);
@@ -97,6 +114,11 @@ public class CommitteeService {
         response.setOrganizationIds(
                 committee.getOrganizations().stream()
                         .map(org -> org.getId())
+                        .collect(Collectors.toList())
+        );
+        response.setCommitteeLeadIds(
+                committee.getUsers().stream()
+                        .map(user -> user.getId())
                         .collect(Collectors.toList())
         );
         return response;
