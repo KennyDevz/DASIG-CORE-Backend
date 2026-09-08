@@ -22,9 +22,10 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('DASIG_ADMIN', 'TBI_MANAGER', 'STAFF')")
     @GetMapping
     public ResponseEntity<DashboardResponse> getCurrentUserDashboard(
-            @RequestParam(required = false) String reportingPeriod
+            @RequestParam(required = false) String reportingPeriod,
+            @RequestParam(required = false) Long committeeId
     ) {
-        return ResponseEntity.ok(dashboardService.getDashboardForCurrentUser(reportingPeriod));
+        return ResponseEntity.ok(dashboardService.getDashboardForCurrentUser(reportingPeriod, committeeId));
     }
 
     @GetMapping("/kpis/{kpiDefinitionId}/period-history")

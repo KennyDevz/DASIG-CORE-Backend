@@ -7,6 +7,8 @@ import edu.cit.dasig_core.features.user.dto.UpdateUserRequest;
 import edu.cit.dasig_core.features.user.dto.UserResponse;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
+import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,11 +43,14 @@ class UserServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private CommitteeRepository committeeRepository;
+
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordEncoder, eventPublisher);
+        userService = new UserService(userRepository, passwordEncoder, eventPublisher, committeeRepository);
     }
 
     @AfterEach
@@ -150,8 +155,36 @@ class UserServiceTest {
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getEmail()).isEqualTo("jane@example.com");
         assertThat(eventCaptor.getValue().getPlainTextPassword()).isNotBlank();
-        // The plain-text password handed to the email event must NOT be the hash we stored
         assertThat(eventCaptor.getValue().getPlainTextPassword()).isNotEqualTo("hashed-password");
+    }
+
+    @Test
+    void registerUser_assignsCommitteesForCommitteeLead() {
+        CreateUserRequest request = new CreateUserRequest();
+        request.setName("Lead");
+        request.setEmail("lead@example.com");
+        request.setRole("TBI_MANAGER");
+        request.setOrganizationId(1L);
+        request.setCommitteeIds(List.of(5L, 6L));
+
+        Committee c1 = new Committee();
+        c1.setId(5L);
+        Committee c2 = new Committee();
+        c2.setId(6L);
+
+        when(userRepository.existsByEmail("lead@example.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(11L);
+            return saved;
+        });
+        when(committeeRepository.findAllById(List.of(5L, 6L))).thenReturn(List.of(c1, c2));
+
+        UserResponse response = userService.registerUser(request);
+
+        assertThat(response.getCommitteeIds()).containsExactlyInAnyOrder(5L, 6L);
+        verify(committeeRepository).findAllById(List.of(5L, 6L));
     }
 
     // ---- modifyUser ----
@@ -207,6 +240,31 @@ class UserServiceTest {
         assertThat(response.getEmail()).isEqualTo("new@example.com");
         assertThat(response.getRole()).isEqualTo("TBI_MANAGER");
         assertThat(response.getOrganizationId()).isEqualTo(2L);
+    }
+
+    @Test
+    void modifyUser_assignsCommitteesForCommitteeLead() {
+        User user = existingUser(1L, "lead@example.com", "hash");
+        user.setRole("TBI_MANAGER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmailAndIdNot("lead@example.com", 1L)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Committee c1 = new Committee();
+        c1.setId(5L);
+        when(committeeRepository.findAllById(List.of(5L))).thenReturn(List.of(c1));
+
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setName("Lead");
+        request.setEmail("lead@example.com");
+        request.setRole("TBI_MANAGER");
+        request.setOrganizationId(1L);
+        request.setCommitteeIds(List.of(5L));
+
+        UserResponse response = userService.modifyUser(1L, request);
+
+        assertThat(response.getCommitteeIds()).containsExactly(5L);
+        verify(committeeRepository).findAllById(List.of(5L));
     }
 
     // ---- deactivateAccount ----

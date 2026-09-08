@@ -10,14 +10,8 @@ import java.util.List;
 @Repository
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
 
-    // Checks if an organization name is already taken during creation
     boolean existsByName(String name);
 
-    // Checks if a name is already taken by a DIFFERENT organization during an update
     boolean existsByNameAndIdNot(String name, Long id);
-
-    List<Organization> findByCommitteeId(Long committeeId);
-
-    List<Organization> findByCommitteeIdAndStatus(Long committeeId, String status);
 
 }

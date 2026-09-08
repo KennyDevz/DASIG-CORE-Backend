@@ -2,6 +2,7 @@ package edu.cit.dasig_core.features.dashboard.service;
 
 import edu.cit.dasig_core.features.dashboard.dto.DashboardKpiItemResponse;
 import edu.cit.dasig_core.features.dashboard.dto.DashboardResponse;
+import edu.cit.dasig_core.features.dashboard.dto.DashboardCommitteeOption;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryItemResponse;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryResponse;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodSubmissionEntryResponse;
@@ -17,6 +18,9 @@ import edu.cit.dasig_core.features.kpisubmission.util.KpiPeriodProgressCalculato
 import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
+import edu.cit.dasig_core.features.committee.model.Committee;
+import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
+import edu.cit.dasig_core.features.organization.model.Organization;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -39,18 +43,20 @@ public class DashboardService {
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final OrganizationRepository organizationRepository;
+    private final CommitteeRepository committeeRepository;
 
     @Transactional(readOnly = true)
-    public DashboardResponse getDashboardForCurrentUser(String reportingPeriod) {
+    public DashboardResponse getDashboardForCurrentUser(String reportingPeriod, Long committeeId) {
         User user = resolveCurrentUser();
-        List<KpiDefinition> visibleKpis = resolveVisibleKpis(user);
+        List<KpiDefinition> visibleKpis = resolveVisibleKpis(user, committeeId);
 
         DashboardResponse response = new DashboardResponse();
         response.setRole(user.getRole());
         response.setOrganizationId(user.getOrganizationId());
         response.setOrganizationName(resolveOrganizationName(user));
-        response.setCommitteeName(resolveCommitteeName(user));
+        response.setCommitteeName(resolveCommitteeName(user, committeeId));
         response.setReportingPeriod(reportingPeriod);
+        response.setCommittees(resolveCommitteeOptions(user, committeeId));
         response.setKpis(visibleKpis.stream()
                 .map(kpi -> toDashboardKpiItem(kpi, user, reportingPeriod))
                 .toList());
@@ -156,15 +162,15 @@ public class DashboardService {
         }
 
         boolean hasAccess = kpiDefinition.getCommittee() != null &&
-                organizationRepository.findByCommitteeId(kpiDefinition.getCommittee().getId())
-                        .stream().anyMatch(org -> org.getId().equals(user.getOrganizationId()));
+                kpiDefinition.getCommittee().getOrganizations().stream()
+                        .anyMatch(org -> org.getId().equals(user.getOrganizationId()));
 
         if (!hasAccess) {
             throw new IllegalArgumentException("You do not have access to this KPI.");
         }
     }
 
-    private List<KpiDefinition> resolveVisibleKpis(User user) {
+    private List<KpiDefinition> resolveVisibleKpis(User user, Long committeeId) {
         if ("DASIG_ADMIN".equals(user.getRole())) {
             return kpiDefinitionRepository.findAll();
         }
@@ -173,10 +179,55 @@ public class DashboardService {
             throw new IllegalArgumentException("Organization is required for this role.");
         }
 
+        if (committeeId != null) {
+            return kpiDefinitionRepository.findByCommitteeId(committeeId)
+                    .stream()
+                    .filter(kpi -> !kpi.isArchived())
+                    .toList();
+        }
+
         return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId())
                 .stream()
                 .filter(kpi -> !kpi.isArchived())
                 .toList();
+    }
+
+    private List<DashboardCommitteeOption> resolveCommitteeOptions(User user, Long selectedCommitteeId) {
+        if (user.getOrganizationId() == null) {
+            return List.of();
+        }
+
+        Organization org = organizationRepository.findById(user.getOrganizationId()).orElse(null);
+        if (org == null) {
+            return List.of();
+        }
+
+        return org.getCommittees().stream()
+                .filter(c -> "Active".equalsIgnoreCase(c.getStatus()))
+                .map(c -> {
+                    DashboardCommitteeOption option = new DashboardCommitteeOption();
+                    option.setId(c.getId());
+                    option.setName(c.getName());
+                    option.setOrganizationName(org.getName());
+                    option.setCurrent(selectedCommitteeId != null && selectedCommitteeId.equals(c.getId()));
+                    return option;
+                })
+                .toList();
+    }
+
+    private String resolveCommitteeName(User user, Long committeeId) {
+        if (committeeId != null) {
+            return committeeRepository.findById(committeeId)
+                    .map(Committee::getName)
+                    .orElse(null);
+        }
+        if (user.getOrganizationId() == null) {
+            return null;
+        }
+
+        return organizationRepository.findById(user.getOrganizationId())
+                .map(org -> !org.getCommittees().isEmpty() ? org.getCommittees().get(0).getName() : null)
+                .orElse(null);
     }
 
     private DashboardKpiItemResponse toDashboardKpiItem(
@@ -279,7 +330,7 @@ public class DashboardService {
         }
 
         return organizationRepository.findById(user.getOrganizationId())
-                .map(org -> org.getCommittee() != null ? org.getCommittee().getName() : null)
+                .map(org -> !org.getCommittees().isEmpty() ? org.getCommittees().get(0).getName() : null)
                 .orElse(null);
     }
 

@@ -75,12 +75,11 @@ class DashboardServiceTest {
         kpi.setUnit("count");
         kpi.setThreshold(50.0);
         kpi.setDeadline(LocalDate.now().plusMonths(6));
-        // Hibernate's @CreationTimestamp always populates dateCreated once persisted; set it
-        // explicitly here since this KpiDefinition is never actually saved through JPA.
         kpi.setDateCreated(java.time.LocalDateTime.now().minusMonths(1));
         kpi.setReportingFrequency(ReportingFrequency.QUARTERLY);
         Committee committee = new Committee();
         committee.setId(committeeId);
+        committee.setOrganizations(new java.util.ArrayList<>());
         kpi.setCommittee(committee);
         return kpi;
     }
@@ -188,7 +187,6 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(staff));
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi(1L, 5L)));
-        when(organizationRepository.findByCommitteeId(5L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -21,5 +21,4 @@ public class CreateOrganizationRequest {
 
     private String contactNumber;
 
-    private Long committeeId;
 }

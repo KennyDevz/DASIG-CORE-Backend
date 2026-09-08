@@ -12,4 +12,5 @@ public class DashboardResponse {
     private String committeeName;
     private String reportingPeriod;
     private List<DashboardKpiItemResponse> kpis;
+    private List<DashboardCommitteeOption> committees;
 }

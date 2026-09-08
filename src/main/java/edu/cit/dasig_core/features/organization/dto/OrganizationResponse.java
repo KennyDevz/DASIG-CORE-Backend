@@ -2,6 +2,8 @@ package edu.cit.dasig_core.features.organization.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class OrganizationResponse {
 
@@ -12,7 +14,7 @@ public class OrganizationResponse {
     private String contactEmail;
     private String contactNumber;
     private String status;
-    private Long committeeId;
-    private String committeeName;
+    private List<Long> committeeIds;
+    private List<String> committeeNames;
 
 }

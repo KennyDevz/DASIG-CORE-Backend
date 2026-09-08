@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class UpdateUserRequest {
 
@@ -18,6 +20,8 @@ public class UpdateUserRequest {
     @NotBlank(message = "Role is required")
     @Pattern(regexp = "^(DASIG_ADMIN|TBI_MANAGER|STAFF)$", message = "Role must be DASIG_ADMIN, TBI_MANAGER, or STAFF")
     private String role;
-
     private Long organizationId;
+
+    private List<Long> committeeIds;
+
 }

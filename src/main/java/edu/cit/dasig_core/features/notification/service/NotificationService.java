@@ -140,7 +140,7 @@ public class NotificationService {
             return;
         }
 
-        List<Organization> organizations = organizationRepository.findByCommitteeId(kpi.getCommittee().getId());
+        List<Organization> organizations = kpi.getCommittee().getOrganizations();
         for (Organization org : organizations) {
             if (notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(kpi.getId(), org.getId(), type)) {
                 continue;

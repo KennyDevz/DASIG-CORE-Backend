@@ -38,14 +38,10 @@ class CommitteeServiceTest {
         committeeService = new CommitteeService(committeeRepository, organizationRepository);
     }
 
-    private Organization organization(Long id, Committee currentCommittee) {
+    private Organization organization(Long id) {
         Organization org = new Organization();
         org.setId(id);
         org.setName("Org " + id);
-        org.setCommittee(currentCommittee);
-        if (currentCommittee != null) {
-            currentCommittee.getOrganizations().add(org);
-        }
         return org;
     }
 
@@ -69,12 +65,11 @@ class CommitteeServiceTest {
         request.setDescription("desc");
         request.setOrganizationIds(List.of(1L, 2L));
 
-        Organization org1 = organization(1L, null);
-        Organization org2 = organization(2L, null);
+        Organization org1 = organization(1L);
+        Organization org2 = organization(2L);
 
         when(committeeRepository.existsByName("Tech Committee")).thenReturn(false);
         when(organizationRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(org1, org2));
-        when(organizationRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         when(committeeRepository.save(any(Committee.class))).thenAnswer(invocation -> {
             Committee committee = invocation.getArgument(0);
             committee.setId(10L);
@@ -85,8 +80,6 @@ class CommitteeServiceTest {
 
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getOrganizationIds()).containsExactlyInAnyOrder(1L, 2L);
-        assertThat(org1.getCommittee()).isNotNull();
-        assertThat(org2.getCommittee()).isNotNull();
     }
 
     @Test
@@ -141,15 +134,14 @@ class CommitteeServiceTest {
         Committee committee = new Committee();
         committee.setId(1L);
         committee.setName("Old Name");
-        Organization previouslyAssigned = organization(5L, committee);
+        Organization previouslyAssigned = organization(5L);
+        committee.getOrganizations().add(previouslyAssigned);
 
-        Organization newOrg = organization(6L, null);
+        Organization newOrg = organization(6L);
 
         when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
         when(committeeRepository.existsByNameAndIdNot("New Name", 1L)).thenReturn(false);
-        when(organizationRepository.save(any(Organization.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(organizationRepository.findAllById(List.of(6L))).thenReturn(List.of(newOrg));
-        when(organizationRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         when(committeeRepository.save(any(Committee.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         UpdateCommitteeRequest request = new UpdateCommitteeRequest();
@@ -158,8 +150,8 @@ class CommitteeServiceTest {
 
         CommitteeResponse response = committeeService.updateCommittee(1L, request);
 
-        assertThat(previouslyAssigned.getCommittee()).isNull();
         assertThat(response.getOrganizationIds()).containsExactly(6L);
+        assertThat(committee.getOrganizations()).containsExactly(newOrg);
     }
 
     @Test
