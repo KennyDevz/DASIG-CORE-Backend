@@ -251,4 +251,39 @@ class KpiDefinitionServiceTest {
 
         assertThat(responses).extracting(KpiDefinitionResponse::getName).containsExactlyInAnyOrder("A", "B");
     }
+    @Test
+    void updateKpiDefinition_oneTimeKpiUpdatesReportingPeriodOnExistingSubmissionsWhenDeadlineExtended() {
+        KpiDefinition existingKpi = new KpiDefinition();
+        existingKpi.setId(10L);
+        existingKpi.setName("Old KPI");
+        existingKpi.setDescription("Old Desc");
+        existingKpi.setTargetValue(50.0);
+        existingKpi.setUnit("units");
+        existingKpi.setDeadline(LocalDate.of(2026, 9, 15));
+        existingKpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+
+        UpdateKpiDefinitionRequest request = new UpdateKpiDefinitionRequest();
+        request.setName("Updated KPI");
+        request.setDescription("Updated Desc");
+        request.setTargetValue(50.0);
+        request.setUnit("units");
+        request.setDeadline(LocalDate.of(2026, 10, 31));
+        request.setThreshold(100.0);
+        request.setReportingFrequency(ReportingFrequency.ONE_TIME);
+
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(1L);
+        submission.setReportingPeriod("Due by Sep 15, 2026");
+        submission.setSubmittedValue(25.0);
+
+        when(kpiDefinitionRepository.findById(10L)).thenReturn(Optional.of(existingKpi));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(i -> i.getArgument(0));
+        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(submission));
+
+        KpiDefinitionResponse response = kpiDefinitionService.updateKpiDefinition(10L, request);
+
+        assertThat(response.getDeadline()).isEqualTo(LocalDate.of(2026, 10, 31));
+        assertThat(submission.getReportingPeriod()).isEqualTo("Due by Oct 31, 2026");
+        verify(kpiSubmissionRepository).save(submission);
+    }
 }

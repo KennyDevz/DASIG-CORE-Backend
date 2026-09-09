@@ -6,6 +6,9 @@ import edu.cit.dasig_core.features.dashboard.dto.DashboardResponse;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
+import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryResponse;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.user.model.User;
@@ -266,5 +269,81 @@ class DashboardServiceTest {
         assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("You do not have access to this KPI.");
+    }
+    @Test
+    void getDashboardForCurrentUser_oneTimeKpiWithExtendedDeadlineRetainsSubmissionsAndProgress() {
+        User admin = user("DASIG_ADMIN", null);
+        authenticateAs("admin@example.com");
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+
+        KpiDefinition oneTimeKpi = new KpiDefinition();
+        oneTimeKpi.setId(10L);
+        oneTimeKpi.setName("One Time KPI");
+        oneTimeKpi.setTargetValue(100.0);
+        oneTimeKpi.setUnit("units");
+        oneTimeKpi.setThreshold(100.0);
+        // Deadline was extended to 2026-10-31
+        oneTimeKpi.setDeadline(LocalDate.of(2026, 10, 31));
+        oneTimeKpi.setDateCreated(LocalDate.of(2026, 8, 1).atStartOfDay());
+        oneTimeKpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+
+        KpiSubmission legacySubmission = new KpiSubmission();
+        legacySubmission.setId(101L);
+        legacySubmission.setKpiDefinition(oneTimeKpi);
+        legacySubmission.setSubmissionType(SubmissionType.FINAL);
+        legacySubmission.setSubmittedValue(40.0);
+        legacySubmission.setReportingPeriod("Due by Sep 15, 2026"); // Old deadline period
+        legacySubmission.setSubmissionDate(LocalDate.of(2026, 8, 20));
+
+        when(kpiDefinitionRepository.findAll()).thenReturn(List.of(oneTimeKpi));
+        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(legacySubmission));
+
+        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
+
+        assertThat(response.getKpis()).hasSize(1);
+        assertThat(response.getKpis().get(0).getSubmittedValue()).isEqualTo(40.0);
+        assertThat(response.getKpis().get(0).getAchievementRate()).isEqualTo(40.0);
+        assertThat(response.getKpis().get(0).getStatus()).isNotNull();
+    }
+
+    @Test
+    void getKpiPeriodHistory_oneTimeKpiWithExtendedDeadlineRetainsAllSubmissionsInPeriodHistory() {
+        User admin = user("DASIG_ADMIN", null);
+        authenticateAs("admin@example.com");
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+
+        KpiDefinition oneTimeKpi = new KpiDefinition();
+        oneTimeKpi.setId(10L);
+        oneTimeKpi.setName("One Time KPI");
+        oneTimeKpi.setTargetValue(100.0);
+        oneTimeKpi.setUnit("units");
+        oneTimeKpi.setDeadline(LocalDate.of(2026, 10, 31));
+        oneTimeKpi.setDateCreated(LocalDate.of(2026, 8, 1).atStartOfDay());
+        oneTimeKpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+
+        User submitter = new User();
+        submitter.setId(2L);
+        submitter.setName("Submitter User");
+        submitter.setRole("STAFF");
+
+        KpiSubmission legacySubmission = new KpiSubmission();
+        legacySubmission.setId(101L);
+        legacySubmission.setKpiDefinition(oneTimeKpi);
+        legacySubmission.setSubmissionType(SubmissionType.FINAL);
+        legacySubmission.setSubmittedValue(50.0);
+        legacySubmission.setAchievementRate(50.0);
+        legacySubmission.setPerformanceStatus("GREEN");
+        legacySubmission.setReportingPeriod("Due by Sep 15, 2026");
+        legacySubmission.setSubmissionDate(LocalDate.of(2026, 8, 20));
+        legacySubmission.setSubmittedBy(submitter);
+
+        when(kpiDefinitionRepository.findById(10L)).thenReturn(Optional.of(oneTimeKpi));
+        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(legacySubmission));
+
+        KpiPeriodHistoryResponse history = dashboardService.getKpiPeriodHistory(10L, null);
+
+        assertThat(history.getPeriods()).hasSize(1);
+        assertThat(history.getPeriods().get(0).getSubmissions()).hasSize(1);
+        assertThat(history.getPeriods().get(0).getSubmissions().get(0).getSubmittedValue()).isEqualTo(50.0);
     }
 }

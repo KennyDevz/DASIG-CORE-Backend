@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.kpisubmission.util;
 
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
+import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 
@@ -35,7 +36,11 @@ public final class KpiPeriodProgressCalculator {
 
         int zeroBasedPeriodIndex = periods.indexOf(reportingPeriod);
         if (zeroBasedPeriodIndex < 0) {
-            throw new IllegalArgumentException("Invalid reporting period for this KPI.");
+            if (kpiDefinition.getReportingFrequency() == ReportingFrequency.ONE_TIME && !periods.isEmpty()) {
+                zeroBasedPeriodIndex = 0;
+            } else {
+                throw new IllegalArgumentException("Invalid reporting period for this KPI.");
+            }
         }
 
         int periodNumber = zeroBasedPeriodIndex + 1;
@@ -45,11 +50,16 @@ public final class KpiPeriodProgressCalculator {
         // or just the full targetValue for ONE_TIME KPIs (periodCount == 1).
         double expectedTarget = kpiDefinition.getTargetValue() * progressRatio;
 
-        double cumulativeSubmittedValue = currentSubmittedValue + sumPreviousPeriodValues(
-                submissions,
-                periods,
-                zeroBasedPeriodIndex
-        );
+        double cumulativeSubmittedValue;
+        if (kpiDefinition.getReportingFrequency() == ReportingFrequency.ONE_TIME) {
+            cumulativeSubmittedValue = currentSubmittedValue;
+        } else {
+            cumulativeSubmittedValue = currentSubmittedValue + sumPreviousPeriodValues(
+                    submissions,
+                    periods,
+                    zeroBasedPeriodIndex
+            );
+        }
 
         double achievementRate = KpiAchievementCalculator.calculate(cumulativeSubmittedValue, expectedTarget);
 
@@ -76,7 +86,7 @@ public final class KpiPeriodProgressCalculator {
             List<KpiSubmission> submissions
     ) {
         double currentSubmittedValue = submissions.stream()
-                .filter(submission -> reportingPeriod.equals(submission.getReportingPeriod()))
+                .filter(submission -> isSubmissionInPeriod(kpiDefinition, reportingPeriod, submission))
                 .mapToDouble(KpiSubmission::getSubmittedValue)
                 .sum();
 
@@ -90,7 +100,7 @@ public final class KpiPeriodProgressCalculator {
             double newSubmittedValue
     ) {
         double existingCurrentPeriodValue = existingSubmissions.stream()
-                .filter(submission -> reportingPeriod.equals(submission.getReportingPeriod()))
+                .filter(submission -> isSubmissionInPeriod(kpiDefinition, reportingPeriod, submission))
                 .mapToDouble(KpiSubmission::getSubmittedValue)
                 .sum();
 
@@ -100,6 +110,17 @@ public final class KpiPeriodProgressCalculator {
                 existingSubmissions,
                 existingCurrentPeriodValue + newSubmittedValue
         );
+    }
+
+    private static boolean isSubmissionInPeriod(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            KpiSubmission submission
+    ) {
+        if (kpiDefinition.getReportingFrequency() == ReportingFrequency.ONE_TIME) {
+            return true;
+        }
+        return reportingPeriod != null && reportingPeriod.equals(submission.getReportingPeriod());
     }
 
     private static double sumPreviousPeriodValues(

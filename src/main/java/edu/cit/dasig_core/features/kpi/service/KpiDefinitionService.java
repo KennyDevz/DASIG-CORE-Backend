@@ -6,6 +6,9 @@ import edu.cit.dasig_core.features.kpi.dto.CreateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
+import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
+import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
+import java.time.LocalDate;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
@@ -82,6 +85,26 @@ public class KpiDefinitionService {
         kpiDef.setReportingFrequency(request.getReportingFrequency());
 
         KpiDefinition updatedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
+
+        if (updatedKpiDef.getReportingFrequency() == ReportingFrequency.ONE_TIME) {
+            LocalDate assignmentStart = updatedKpiDef.getDateCreated() != null
+                    ? updatedKpiDef.getDateCreated().toLocalDate()
+                    : LocalDate.now();
+            String newReportingPeriod = ReportingPeriodResolver.resolveCurrentPeriod(
+                    ReportingFrequency.ONE_TIME,
+                    updatedKpiDef.getDeadline(),
+                    assignmentStart,
+                    LocalDate.now()
+            );
+            List<KpiSubmission> existingSubmissions = kpiSubmissionRepository.findByKpiDefinitionId(id);
+            for (KpiSubmission submission : existingSubmissions) {
+                if (newReportingPeriod != null && !newReportingPeriod.equals(submission.getReportingPeriod())) {
+                    submission.setReportingPeriod(newReportingPeriod);
+                    kpiSubmissionRepository.save(submission);
+                }
+            }
+        }
+
         notificationService.createDeadlineNotificationsForKpi(updatedKpiDef);
         return mapToResponse(updatedKpiDef);
     }
