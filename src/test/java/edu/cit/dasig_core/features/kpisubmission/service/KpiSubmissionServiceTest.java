@@ -592,4 +592,92 @@ class KpiSubmissionServiceTest {
         assertThat(download.fileName()).isEqualTo("report.pdf");
         assertThat(download.content()).containsExactly(1, 2, 3);
     }
+    @Test
+    void reviewSubmission_setsMemberViewedFalse() {
+        authenticateAs("lead@example.com");
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(1L);
+        manager.setCommittees(List.of(assigned));
+        when(userRepository.findByEmail("lead@example.com")).thenReturn(Optional.of(manager));
+
+        KpiSubmission submission = internalPendingSubmission(999L);
+        submission.setMemberViewed(true);
+        when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
+        when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(true);
+        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+
+        ReviewKpiSubmissionRequest request = new ReviewKpiSubmissionRequest();
+        request.setReviewStatus(SubmissionReviewStatus.APPROVED);
+
+        KpiSubmissionResponse response = kpiSubmissionService.reviewSubmission(1L, request);
+
+        assertThat(response.isMemberViewed()).isFalse();
+        assertThat(submission.isMemberViewed()).isFalse();
+    }
+
+    @Test
+    void getBadgeCountsForCurrentUser_returnsPendingCountForTbiManager() {
+        authenticateAs("lead@example.com");
+        User manager = user("TBI_MANAGER", 9L);
+        Committee assigned = new Committee();
+        assigned.setId(10L);
+        manager.setCommittees(List.of(assigned));
+        when(userRepository.findByEmail("lead@example.com")).thenReturn(Optional.of(manager));
+        when(kpiSubmissionRepository.countByCommitteeIdsAndReviewStatusAndSubmissionType(
+                List.of(10L),
+                SubmissionReviewStatus.PENDING,
+                SubmissionType.INTERNAL
+        )).thenReturn(5L);
+
+        edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionBadgeCountsResponse counts =
+                kpiSubmissionService.getBadgeCountsForCurrentUser();
+
+        assertThat(counts.pendingCount()).isEqualTo(5L);
+        assertThat(counts.unreadReviewCount()).isEqualTo(0L);
+    }
+
+    @Test
+    void getBadgeCountsForCurrentUser_returnsUnreadReviewCountForStaff() {
+        authenticateAs("staff@example.com");
+        User staff = user("STAFF", 9L);
+        staff.setId(42L);
+        when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
+        when(kpiSubmissionRepository.countUnviewedReviewedSubmissions(
+                eq(42L),
+                eq(SubmissionType.INTERNAL),
+                anyList()
+        )).thenReturn(3L);
+
+        edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionBadgeCountsResponse counts =
+                kpiSubmissionService.getBadgeCountsForCurrentUser();
+
+        assertThat(counts.pendingCount()).isEqualTo(0L);
+        assertThat(counts.unreadReviewCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void markSubmissionsAsViewedForCurrentUser_marksSubmissionsAsViewed() {
+        authenticateAs("staff@example.com");
+        User staff = user("STAFF", 9L);
+        staff.setId(42L);
+        when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
+
+        KpiSubmission sub1 = internalPendingSubmission(9L);
+        sub1.setSubmittedBy(staff);
+        sub1.setMemberViewed(false);
+
+        when(kpiSubmissionRepository.findBySubmittedByIdAndSubmissionTypeAndReviewStatusInAndMemberViewedFalse(
+                eq(42L),
+                eq(SubmissionType.INTERNAL),
+                anyList()
+        )).thenReturn(List.of(sub1));
+
+        kpiSubmissionService.markSubmissionsAsViewedForCurrentUser(null);
+
+        assertThat(sub1.isMemberViewed()).isTrue();
+        verify(kpiSubmissionRepository).saveAll(anyList());
+    }
+
 }

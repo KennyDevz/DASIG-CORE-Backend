@@ -3,6 +3,8 @@ package edu.cit.dasig_core.features.kpisubmission.controller;
 import edu.cit.dasig_core.features.kpi.dto.KpiDefinitionResponse;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
+import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionBadgeCountsResponse;
+import edu.cit.dasig_core.features.kpisubmission.dto.MarkSubmissionsViewedRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
 import edu.cit.dasig_core.features.kpisubmission.dto.ReviewKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
@@ -49,6 +51,20 @@ public class KpiSubmissionController {
                 committeeId
         );
         return ResponseEntity.ok(responses);
+    }
+
+    @PreAuthorize("hasAnyRole('TBI_MANAGER', 'STAFF')")
+    @GetMapping("/badge-counts")
+    public ResponseEntity<KpiSubmissionBadgeCountsResponse> getBadgeCounts() {
+        return ResponseEntity.ok(kpiSubmissionService.getBadgeCountsForCurrentUser());
+    }
+
+    @PreAuthorize("hasRole('STAFF')")
+    @PatchMapping("/mark-viewed")
+    public ResponseEntity<Void> markViewed(@RequestBody(required = false) MarkSubmissionsViewedRequest request) {
+        List<Long> ids = request != null ? request.submissionIds() : null;
+        kpiSubmissionService.markSubmissionsAsViewedForCurrentUser(ids);
+        return ResponseEntity.noContent().build();
     }
 
     @PreAuthorize("hasAnyRole('TBI_MANAGER', 'STAFF')")

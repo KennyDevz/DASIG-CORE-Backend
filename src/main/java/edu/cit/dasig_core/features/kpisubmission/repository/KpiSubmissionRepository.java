@@ -62,6 +62,26 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
     @Query("SELECT s FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds ORDER BY s.dateCreated DESC")
     List<KpiSubmission> findByCommitteeIdsOrderByDateCreatedDesc(@Param("committeeIds") List<Long> committeeIds);
 
+    @Query("SELECT COUNT(s) FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds AND s.reviewStatus = :reviewStatus AND s.submissionType = :submissionType")
+    long countByCommitteeIdsAndReviewStatusAndSubmissionType(
+            @Param("committeeIds") List<Long> committeeIds,
+            @Param("reviewStatus") SubmissionReviewStatus reviewStatus,
+            @Param("submissionType") SubmissionType submissionType
+    );
+
+    @Query("SELECT COUNT(s) FROM KpiSubmission s WHERE s.submittedBy.id = :userId AND s.submissionType = :submissionType AND s.reviewStatus IN :reviewStatuses AND s.memberViewed = false")
+    long countUnviewedReviewedSubmissions(
+            @Param("userId") Long userId,
+            @Param("submissionType") SubmissionType submissionType,
+            @Param("reviewStatuses") List<SubmissionReviewStatus> reviewStatuses
+    );
+
+    List<KpiSubmission> findBySubmittedByIdAndSubmissionTypeAndReviewStatusInAndMemberViewedFalse(
+            Long userId,
+            SubmissionType submissionType,
+            List<SubmissionReviewStatus> reviewStatuses
+    );
+
     @Query("SELECT s.kpiDefinition.committee.id, COUNT(s) FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds AND s.reviewStatus = edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus.PENDING GROUP BY s.kpiDefinition.committee.id")
     List<Object[]> countPendingSubmissionsByCommitteeIds(@Param("committeeIds") List<Long> committeeIds);
 }

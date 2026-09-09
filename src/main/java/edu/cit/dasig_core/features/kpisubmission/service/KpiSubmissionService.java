@@ -5,6 +5,7 @@ import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.dto.CreateKpiSubmissionRequest;
+import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionBadgeCountsResponse;
 import edu.cit.dasig_core.features.kpisubmission.dto.KpiSubmissionResponse;
 import edu.cit.dasig_core.features.kpisubmission.dto.ReviewKpiSubmissionRequest;
 import edu.cit.dasig_core.features.kpisubmission.dto.SubmissionDocumentResponse;
@@ -207,9 +208,11 @@ public class KpiSubmissionService {
         submission.setAchievementRate(achievementRate);
         submission.setPerformanceStatus(performanceStatus);
         submission.setReviewStatus(resolveInitialReviewStatus(user));
+        submission.setMemberViewed(true);
         if (submission.getReviewStatus() == SubmissionReviewStatus.APPROVED) {
             submission.setReviewedBy(user);
             submission.setReviewedAt(LocalDateTime.now());
+        submission.setMemberViewed(false);
         }
 
         KpiSubmission savedSubmission = kpiSubmissionRepository.save(submission);
@@ -257,6 +260,7 @@ public class KpiSubmissionService {
         submission.setReviewStatus(request.getReviewStatus());
         submission.setReviewedBy(user);
         submission.setReviewedAt(LocalDateTime.now());
+        submission.setMemberViewed(false);
 
         if (request.getReviewStatus() == SubmissionReviewStatus.REJECTED) {
             if (request.getRejectionReason() == null || request.getRejectionReason().isBlank()) {
@@ -334,6 +338,7 @@ public class KpiSubmissionService {
         response.setReviewedByName(submission.getReviewedBy() != null ? submission.getReviewedBy().getName() : null);
         response.setReviewedAt(submission.getReviewedAt());
         response.setSourceSubmissionId(submission.getSourceSubmission() != null ? submission.getSourceSubmission().getId() : null);
+        response.setMemberViewed(submission.isMemberViewed());
         response.setCreatedAt(submission.getDateCreated());
         if (submission.getOrganization() != null) {
             response.setOrganizationId(submission.getOrganization().getId());
@@ -460,6 +465,55 @@ public class KpiSubmissionService {
         return submissions.stream()
                 .filter(submission -> submission.getReviewStatus() != SubmissionReviewStatus.REJECTED)
                 .toList();
+    }
+
+
+    @Transactional(readOnly = true)
+    public KpiSubmissionBadgeCountsResponse getBadgeCountsForCurrentUser() {
+        User user = resolveCurrentUser();
+        if ("TBI_MANAGER".equals(user.getRole())) {
+            List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
+            if (assignedCommittees.isEmpty()) {
+                return new KpiSubmissionBadgeCountsResponse(0L, 0L);
+            }
+            List<Long> committeeIds = assignedCommittees.stream().map(Committee::getId).toList();
+            long pendingCount = kpiSubmissionRepository.countByCommitteeIdsAndReviewStatusAndSubmissionType(
+                    committeeIds,
+                    SubmissionReviewStatus.PENDING,
+                    SubmissionType.INTERNAL
+            );
+            return new KpiSubmissionBadgeCountsResponse(pendingCount, 0L);
+        } else if ("STAFF".equals(user.getRole())) {
+            long unreadReviewCount = kpiSubmissionRepository.countUnviewedReviewedSubmissions(
+                    user.getId(),
+                    SubmissionType.INTERNAL,
+                    List.of(SubmissionReviewStatus.APPROVED, SubmissionReviewStatus.REJECTED)
+            );
+            return new KpiSubmissionBadgeCountsResponse(0L, unreadReviewCount);
+        }
+        return new KpiSubmissionBadgeCountsResponse(0L, 0L);
+    }
+
+    @Transactional
+    public void markSubmissionsAsViewedForCurrentUser(List<Long> submissionIds) {
+        User user = resolveCurrentUser();
+        List<KpiSubmission> submissions;
+        if (submissionIds != null && !submissionIds.isEmpty()) {
+            submissions = kpiSubmissionRepository.findAllById(submissionIds).stream()
+                    .filter(s -> s.getSubmittedBy() != null && s.getSubmittedBy().getId().equals(user.getId()))
+                    .filter(s -> !s.isMemberViewed())
+                    .toList();
+        } else {
+            submissions = kpiSubmissionRepository.findBySubmittedByIdAndSubmissionTypeAndReviewStatusInAndMemberViewedFalse(
+                    user.getId(),
+                    SubmissionType.INTERNAL,
+                    List.of(SubmissionReviewStatus.APPROVED, SubmissionReviewStatus.REJECTED)
+            );
+        }
+        if (!submissions.isEmpty()) {
+            submissions.forEach(s -> s.setMemberViewed(true));
+            kpiSubmissionRepository.saveAll(submissions);
+        }
     }
 
     public record SubmissionDocumentDownload(

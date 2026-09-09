@@ -71,6 +71,13 @@ public class KpiSubmission {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    @Column(name = "member_viewed")
+    private Boolean memberViewed = true;
+
+    public boolean isMemberViewed() {
+        return Boolean.TRUE.equals(memberViewed);
+    }
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_submission_id")
     private KpiSubmission sourceSubmission;
