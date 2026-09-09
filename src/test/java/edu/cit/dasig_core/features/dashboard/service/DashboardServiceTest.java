@@ -179,7 +179,7 @@ class DashboardServiceTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(admin));
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L))
+        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("KPI Definition not found with ID: 1");
     }
@@ -191,7 +191,7 @@ class DashboardServiceTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(staff));
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi(1L, 5L)));
 
-        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L))
+        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("You do not have access to this KPI.");
     }
@@ -207,9 +207,9 @@ class DashboardServiceTest {
 
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
-        when(kpiDefinitionRepository.findByCommittee_Organizations_Id(9L))
-                .thenReturn(List.of(kpi(1L, 5L), kpi(2L, 6L)));
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
+        when(kpiDefinitionRepository.findByCommitteeId(5L))
+                .thenReturn(List.of(kpi(1L, 5L)));
+        when(kpiSubmissionRepository.countPendingSubmissionsByCommitteeIds(List.of(5L)))
                 .thenReturn(List.of());
 
         DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
@@ -247,10 +247,9 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
 
-        DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, 999L);
-
-        assertThat(response.getKpis()).isEmpty();
-        assertThat(response.getCommitteeName()).isNull();
+        assertThatThrownBy(() -> dashboardService.getDashboardForCurrentUser(null, 999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("You do not have access to this committee.");
     }
 
     @Test
@@ -264,7 +263,7 @@ class DashboardServiceTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(manager));
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpi(1L, 999L)));
 
-        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L))
+        assertThatThrownBy(() -> dashboardService.getKpiPeriodHistory(1L, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("You do not have access to this KPI.");
     }

@@ -18,5 +18,7 @@ public class KpiPeriodSubmissionEntryResponse {
     private String reviewedByName;
     private String submittedByName;
     private String submittedByRole;
+    private Long organizationId;
+    private String organizationName;
     private LocalDate submissionDate;
 }

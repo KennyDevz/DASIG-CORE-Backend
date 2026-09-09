@@ -4,6 +4,7 @@ import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class DashboardKpiItemResponse {
@@ -25,4 +26,5 @@ public class DashboardKpiItemResponse {
     private boolean archived;
     private Long committeeId;
     private String committeeName;
+    private List<DashboardOrganizationProgressResponse> organizationBreakdowns;
 }
