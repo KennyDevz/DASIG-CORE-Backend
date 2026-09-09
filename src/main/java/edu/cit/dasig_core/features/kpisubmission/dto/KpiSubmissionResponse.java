@@ -30,5 +30,6 @@ public class KpiSubmissionResponse {
     private Long organizationId;
     private String organizationName;
     private List<SubmissionDocumentResponse> documents;
+    private boolean memberViewed;
     private LocalDateTime createdAt;
 }
