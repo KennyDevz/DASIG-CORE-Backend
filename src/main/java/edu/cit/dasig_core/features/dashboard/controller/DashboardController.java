@@ -30,8 +30,9 @@ public class DashboardController {
 
     @GetMapping("/kpis/{kpiDefinitionId}/period-history")
     public ResponseEntity<KpiPeriodHistoryResponse> getKpiPeriodHistory(
-            @PathVariable Long kpiDefinitionId
+            @PathVariable Long kpiDefinitionId,
+            @RequestParam(required = false) Long committeeId
     ) {
-        return ResponseEntity.ok(dashboardService.getKpiPeriodHistory(kpiDefinitionId));
+        return ResponseEntity.ok(dashboardService.getKpiPeriodHistory(kpiDefinitionId, committeeId));
     }
 }

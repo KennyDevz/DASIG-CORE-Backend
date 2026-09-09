@@ -1,6 +1,7 @@
 package edu.cit.dasig_core.features.dashboard.service;
 
 import edu.cit.dasig_core.features.dashboard.dto.DashboardKpiItemResponse;
+import edu.cit.dasig_core.features.dashboard.dto.DashboardOrganizationProgressResponse;
 import edu.cit.dasig_core.features.dashboard.dto.DashboardResponse;
 import edu.cit.dasig_core.features.dashboard.dto.DashboardCommitteeOption;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryItemResponse;
@@ -65,10 +66,14 @@ public class DashboardService {
     }
 
     @Transactional(readOnly = true)
-    public KpiPeriodHistoryResponse getKpiPeriodHistory(Long kpiDefinitionId) {
+    public KpiPeriodHistoryResponse getKpiPeriodHistory(Long kpiDefinitionId, Long committeeId) {
         User user = resolveCurrentUser();
         KpiDefinition kpiDefinition = kpiDefinitionRepository.findById(kpiDefinitionId)
                 .orElseThrow(() -> new IllegalArgumentException("KPI Definition not found with ID: " + kpiDefinitionId));
+        if (committeeId != null && (kpiDefinition.getCommittee() == null
+                || !committeeId.equals(kpiDefinition.getCommittee().getId()))) {
+            throw new IllegalArgumentException("KPI does not belong to the selected committee.");
+        }
         validateKpiAccess(user, kpiDefinition);
 
         LocalDate assignmentStart = kpiDefinition.getDateCreated() != null
@@ -89,9 +94,7 @@ public class DashboardService {
         List<String> orderedPeriods = new ArrayList<>(periodOptions);
         Collections.reverse(orderedPeriods);
 
-        Map<String, List<KpiSubmission>> submissionsByPeriod = (user.getOrganizationId() != null
-                ? kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationId(kpiDefinitionId, user.getOrganizationId())
-                : kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinitionId))
+        Map<String, List<KpiSubmission>> submissionsByPeriod = resolvePeriodHistorySubmissions(user, kpiDefinition)
                 .stream()
                 .filter(submission -> matchesHistoryVisibility(user, submission))
                 .collect(Collectors.groupingBy(KpiSubmission::getReportingPeriod));
@@ -138,8 +141,31 @@ public class DashboardService {
         entry.setReviewedByName(submission.getReviewedBy() != null ? submission.getReviewedBy().getName() : null);
         entry.setSubmittedByName(submission.getSubmittedBy().getName());
         entry.setSubmittedByRole(submission.getSubmittedBy().getRole());
+        if (submission.getOrganization() != null) {
+            entry.setOrganizationId(submission.getOrganization().getId());
+            entry.setOrganizationName(submission.getOrganization().getName());
+        }
         entry.setSubmissionDate(submission.getSubmissionDate());
         return entry;
+    }
+
+    private List<KpiSubmission> resolvePeriodHistorySubmissions(User user, KpiDefinition kpiDefinition) {
+        if ("DASIG_ADMIN".equals(user.getRole())) {
+            return kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId());
+        }
+
+        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+            List<Long> organizationIds = resolveCommitteeOrganizationIds(kpiDefinition.getCommittee());
+            if (organizationIds.isEmpty()) {
+                return List.of();
+            }
+            return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdIn(kpiDefinition.getId(), organizationIds);
+        }
+
+        return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationId(
+                kpiDefinition.getId(),
+                user.getOrganizationId()
+        );
     }
 
     private boolean matchesHistoryVisibility(User user, KpiSubmission submission) {
@@ -196,21 +222,17 @@ public class DashboardService {
             }
 
             if (committeeId != null) {
-                boolean isAssigned = assignedCommittees.stream().anyMatch(c -> c.getId().equals(committeeId));
-                if (!isAssigned) {
-                    return List.of();
-                }
+                validateCommitteeAssignment(user, committeeId);
                 return kpiDefinitionRepository.findByCommitteeId(committeeId)
                         .stream()
                         .filter(kpi -> !kpi.isArchived())
                         .toList();
             }
 
-            List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
-            return kpiDefinitionRepository.findByCommittee_Organizations_Id(user.getOrganizationId())
-                    .stream()
+            return assignedCommittees.stream()
+                    .flatMap(committee -> kpiDefinitionRepository.findByCommitteeId(committee.getId()).stream())
                     .filter(kpi -> !kpi.isArchived())
-                    .filter(kpi -> kpi.getCommittee() != null && assignedCommitteeIds.contains(kpi.getCommittee().getId()))
+                    .distinct()
                     .toList();
         }
 
@@ -218,6 +240,9 @@ public class DashboardService {
             return kpiDefinitionRepository.findByCommitteeId(committeeId)
                     .stream()
                     .filter(kpi -> !kpi.isArchived())
+                    .filter(kpi -> kpi.getCommittee() != null
+                            && kpi.getCommittee().getOrganizations().stream()
+                                    .anyMatch(org -> org.getId().equals(user.getOrganizationId())))
                     .toList();
         }
 
@@ -281,11 +306,7 @@ public class DashboardService {
     private String resolveCommitteeName(User user, Long committeeId) {
         if (committeeId != null) {
             if ("TBI_MANAGER".equals(user.getRole())) {
-                List<Committee> assignedCommittees = user.getCommittees() != null ? user.getCommittees() : List.of();
-                boolean isAssigned = assignedCommittees.stream().anyMatch(c -> c.getId().equals(committeeId));
-                if (!isAssigned) {
-                    return null;
-                }
+                validateCommitteeAssignment(user, committeeId);
             }
             return committeeRepository.findById(committeeId)
                     .map(Committee::getName)
@@ -312,16 +333,7 @@ public class DashboardService {
                         LocalDate.now()
                 );
 
-        List<KpiSubmission> relatedSubmissions = user.getOrganizationId() != null
-                ? kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
-                        kpiDefinition.getId(),
-                        user.getOrganizationId(),
-                        submissionType
-                )
-                : kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId())
-                        .stream()
-                        .filter(s -> s.getSubmissionType() == submissionType)
-                        .toList();
+        List<KpiSubmission> relatedSubmissions = resolveDashboardSubmissions(kpiDefinition, user, submissionType);
         KpiPeriodProgress progress = reportingPeriod != null
                 ? KpiPeriodProgressCalculator.calculateExisting(kpiDefinition, reportingPeriod, relatedSubmissions)
                 : null;
@@ -352,7 +364,108 @@ public class DashboardService {
         item.setReportingPeriod(reportingPeriod);
         item.setKpiStatus(kpiDefinition.getStatus());
         item.setArchived(kpiDefinition.isArchived());
+        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+            item.setOrganizationBreakdowns(buildOrganizationBreakdowns(
+                    kpiDefinition,
+                    reportingPeriod,
+                    relatedSubmissions
+            ));
+        }
         return item;
+    }
+
+    private List<KpiSubmission> resolveDashboardSubmissions(
+            KpiDefinition kpiDefinition,
+            User user,
+            SubmissionType submissionType
+    ) {
+        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+            List<Long> organizationIds = resolveCommitteeOrganizationIds(kpiDefinition.getCommittee());
+            if (organizationIds.isEmpty()) {
+                return List.of();
+            }
+            return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdInAndSubmissionType(
+                    kpiDefinition.getId(),
+                    organizationIds,
+                    submissionType
+            );
+        }
+
+        if (user.getOrganizationId() != null) {
+            return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+                    kpiDefinition.getId(),
+                    user.getOrganizationId(),
+                    submissionType
+            );
+        }
+
+        return kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId())
+                .stream()
+                .filter(s -> s.getSubmissionType() == submissionType)
+                .toList();
+    }
+
+    private List<DashboardOrganizationProgressResponse> buildOrganizationBreakdowns(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            List<KpiSubmission> relatedSubmissions
+    ) {
+        if (kpiDefinition.getCommittee() == null || kpiDefinition.getCommittee().getOrganizations() == null) {
+            return List.of();
+        }
+
+        return kpiDefinition.getCommittee().getOrganizations().stream()
+                .map(organization -> {
+                    List<KpiSubmission> organizationSubmissions = relatedSubmissions.stream()
+                            .filter(submission -> submission.getOrganization() != null
+                                    && organization.getId().equals(submission.getOrganization().getId()))
+                            .toList();
+
+                    KpiPeriodProgress progress = reportingPeriod != null
+                            ? KpiPeriodProgressCalculator.calculateExisting(
+                                    kpiDefinition,
+                                    reportingPeriod,
+                                    organizationSubmissions
+                            )
+                            : null;
+
+                    double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
+                    double achievementRate = progress != null ? progress.achievementRate() : 0.0;
+                    String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.RED;
+
+                    DashboardOrganizationProgressResponse breakdown = new DashboardOrganizationProgressResponse();
+                    breakdown.setOrganizationId(organization.getId());
+                    breakdown.setOrganizationName(organization.getName());
+                    breakdown.setSubmittedValue(submittedValue);
+                    breakdown.setAchievementRate(achievementRate);
+                    breakdown.setStatus(mapStatus(performanceStatus, submittedValue, kpiDefinition.getTargetValue()));
+                    return breakdown;
+                })
+                .toList();
+    }
+
+    private boolean isAssignedCommitteeLead(User user, Committee committee) {
+        return "TBI_MANAGER".equals(user.getRole())
+                && committee != null
+                && user.getCommittees() != null
+                && user.getCommittees().stream().anyMatch(c -> c.getId().equals(committee.getId()));
+    }
+
+    private List<Long> resolveCommitteeOrganizationIds(Committee committee) {
+        if (committee == null || committee.getOrganizations() == null) {
+            return List.of();
+        }
+        return committee.getOrganizations().stream()
+                .map(Organization::getId)
+                .toList();
+    }
+
+    private void validateCommitteeAssignment(User user, Long committeeId) {
+        boolean isAssigned = user.getCommittees() != null
+                && user.getCommittees().stream().anyMatch(c -> c.getId().equals(committeeId));
+        if (!isAssigned) {
+            throw new IllegalArgumentException("You do not have access to this committee.");
+        }
     }
 
     private SubmissionType resolveSubmissionTypeForDashboard(String role) {

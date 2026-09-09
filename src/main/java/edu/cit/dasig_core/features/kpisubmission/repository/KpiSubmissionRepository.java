@@ -25,6 +25,17 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
             SubmissionType submissionType
     );
 
+    List<KpiSubmission> findByKpiDefinitionIdAndOrganizationIdInAndSubmissionType(
+            Long kpiDefinitionId,
+            List<Long> organizationIds,
+            SubmissionType submissionType
+    );
+
+    List<KpiSubmission> findByKpiDefinitionIdAndOrganizationIdIn(
+            Long kpiDefinitionId,
+            List<Long> organizationIds
+    );
+
     List<KpiSubmission> findByOrganizationId(Long organizationId);
 
     List<KpiSubmission> findByOrganizationIdIn(List<Long> organizationIds);
@@ -44,6 +55,10 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
     );
 
     boolean existsBySourceSubmissionId(Long sourceSubmissionId);
+
+    @Query("SELECT s FROM KpiSubmission s WHERE s.kpiDefinition.committee.id = :committeeId ORDER BY s.dateCreated DESC")
+    List<KpiSubmission> findByCommitteeIdOrderByDateCreatedDesc(@Param("committeeId") Long committeeId);
+
     @Query("SELECT s FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds ORDER BY s.dateCreated DESC")
     List<KpiSubmission> findByCommitteeIdsOrderByDateCreatedDesc(@Param("committeeIds") List<Long> committeeIds);
 

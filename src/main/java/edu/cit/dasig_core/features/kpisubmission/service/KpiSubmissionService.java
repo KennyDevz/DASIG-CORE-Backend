@@ -75,6 +75,17 @@ public class KpiSubmissionService {
             SubmissionType submissionType,
             SubmissionReviewStatus reviewStatus
     ) {
+        return getSubmissionsForCurrentUser(kpiDefinitionId, reportingPeriod, submissionType, reviewStatus, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<KpiSubmissionResponse> getSubmissionsForCurrentUser(
+            Long kpiDefinitionId,
+            String reportingPeriod,
+            SubmissionType submissionType,
+            SubmissionReviewStatus reviewStatus,
+            Long committeeId
+    ) {
         User user = resolveCurrentUser();
         validateSubmitterRole(user);
 
@@ -84,8 +95,14 @@ public class KpiSubmissionService {
             if (assignedCommittees.isEmpty()) {
                 return List.of();
             }
-            List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
-            submissions = kpiSubmissionRepository.findByCommitteeIdsOrderByDateCreatedDesc(assignedCommitteeIds);
+
+            if (committeeId != null) {
+                validateCommitteeAssignment(user, committeeId);
+                submissions = kpiSubmissionRepository.findByCommitteeIdOrderByDateCreatedDesc(committeeId);
+            } else {
+                List<Long> assignedCommitteeIds = assignedCommittees.stream().map(Committee::getId).toList();
+                submissions = kpiSubmissionRepository.findByCommitteeIdsOrderByDateCreatedDesc(assignedCommitteeIds);
+            }
         } else {
             submissions = kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId());
         }
@@ -120,6 +137,14 @@ public class KpiSubmissionService {
         return submission.getSubmittedBy() != null
                 && submission.getSubmittedBy().getId() != null
                 && submission.getSubmittedBy().getId().equals(user.getId());
+    }
+
+    private void validateCommitteeAssignment(User user, Long committeeId) {
+        boolean isAssigned = user.getCommittees() != null
+                && user.getCommittees().stream().anyMatch(c -> c.getId().equals(committeeId));
+        if (!isAssigned) {
+            throw new IllegalArgumentException("You do not have access to this committee.");
+        }
     }
 
     @Transactional
