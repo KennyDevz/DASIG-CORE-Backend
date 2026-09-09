@@ -8,6 +8,7 @@ import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryItemResponse;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryResponse;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodSubmissionEntryResponse;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
+import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
@@ -94,9 +95,13 @@ public class DashboardService {
         List<String> orderedPeriods = new ArrayList<>(periodOptions);
         Collections.reverse(orderedPeriods);
 
-        Map<String, List<KpiSubmission>> submissionsByPeriod = resolvePeriodHistorySubmissions(user, kpiDefinition)
+        List<KpiSubmission> allVisibleSubmissions = resolvePeriodHistorySubmissions(user, kpiDefinition)
                 .stream()
                 .filter(submission -> matchesHistoryVisibility(user, submission))
+                .toList();
+
+        Map<String, List<KpiSubmission>> submissionsByPeriod = allVisibleSubmissions
+                .stream()
                 .collect(Collectors.groupingBy(KpiSubmission::getReportingPeriod));
 
         List<KpiPeriodHistoryItemResponse> periodItems = orderedPeriods.stream()
@@ -104,7 +109,13 @@ public class DashboardService {
                     KpiPeriodHistoryItemResponse item = new KpiPeriodHistoryItemResponse();
                     item.setReportingPeriod(period);
                     item.setCurrent(period.equals(currentPeriod));
-                    item.setSubmissions(submissionsByPeriod.getOrDefault(period, List.of())
+                    List<KpiSubmission> periodSubmissions;
+                    if (kpiDefinition.getReportingFrequency() == ReportingFrequency.ONE_TIME) {
+                        periodSubmissions = allVisibleSubmissions;
+                    } else {
+                        periodSubmissions = submissionsByPeriod.getOrDefault(period, List.of());
+                    }
+                    item.setSubmissions(periodSubmissions
                             .stream()
                             .sorted(Comparator.comparing(KpiSubmission::getSubmissionType))
                             .map(this::toPeriodSubmissionEntry)
