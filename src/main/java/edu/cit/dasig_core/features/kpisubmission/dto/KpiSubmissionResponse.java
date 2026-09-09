@@ -22,6 +22,7 @@ public class KpiSubmissionResponse {
     private SubmissionType submissionType;
     private Double achievementRate;
     private String performanceStatus;
+    private String referenceCode;
     private SubmissionReviewStatus reviewStatus;
     private String rejectionReason;
     private String reviewedByName;
