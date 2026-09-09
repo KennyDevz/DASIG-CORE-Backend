@@ -57,6 +57,9 @@ public class KpiSubmission {
     @Column(name = "performance_status", nullable = false)
     private String performanceStatus;
 
+    @Column(name = "reference_code", unique = true, length = 50)
+    private String referenceCode;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "review_status")
     private SubmissionReviewStatus reviewStatus = SubmissionReviewStatus.PENDING;

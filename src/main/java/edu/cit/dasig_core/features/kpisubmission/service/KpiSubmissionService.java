@@ -35,6 +35,7 @@ import java.util.List;
 
 @Service
 public class KpiSubmissionService {
+    private static final String SUBMISSION_REFERENCE_PREFIX = "SUB-";
 
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
@@ -215,7 +216,7 @@ public class KpiSubmissionService {
         submission.setMemberViewed(false);
         }
 
-        KpiSubmission savedSubmission = kpiSubmissionRepository.save(submission);
+        KpiSubmission savedSubmission = saveWithReferenceCode(submission);
 
         submissionDocumentService.storeDocuments(savedSubmission, files);
 
@@ -333,6 +334,7 @@ public class KpiSubmissionService {
         response.setSubmissionType(submission.getSubmissionType());
         response.setAchievementRate(submission.getAchievementRate());
         response.setPerformanceStatus(submission.getPerformanceStatus());
+        response.setReferenceCode(resolveReferenceCode(submission));
         response.setReviewStatus(submission.getReviewStatus());
         response.setRejectionReason(submission.getRejectionReason());
         response.setReviewedByName(submission.getReviewedBy() != null ? submission.getReviewedBy().getName() : null);
@@ -458,7 +460,27 @@ public class KpiSubmissionService {
         officialSubmission.setReviewedAt(LocalDateTime.now());
         officialSubmission.setSourceSubmission(staffSubmission);
 
-        return kpiSubmissionRepository.save(officialSubmission);
+        return saveWithReferenceCode(officialSubmission);
+    }
+
+    private KpiSubmission saveWithReferenceCode(KpiSubmission submission) {
+        KpiSubmission savedSubmission = kpiSubmissionRepository.save(submission);
+        if (savedSubmission.getReferenceCode() == null || savedSubmission.getReferenceCode().isBlank()) {
+            savedSubmission.setReferenceCode(buildReferenceCode(savedSubmission.getId()));
+            savedSubmission = kpiSubmissionRepository.save(savedSubmission);
+        }
+        return savedSubmission;
+    }
+
+    private String resolveReferenceCode(KpiSubmission submission) {
+        if (submission.getReferenceCode() != null && !submission.getReferenceCode().isBlank()) {
+            return submission.getReferenceCode();
+        }
+        return buildReferenceCode(submission.getId());
+    }
+
+    private String buildReferenceCode(Long submissionId) {
+        return SUBMISSION_REFERENCE_PREFIX + String.format("%06d", submissionId);
     }
 
     private List<KpiSubmission> filterCountableSubmissions(List<KpiSubmission> submissions) {
