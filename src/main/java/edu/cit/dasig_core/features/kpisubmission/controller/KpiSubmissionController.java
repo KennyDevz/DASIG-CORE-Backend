@@ -38,13 +38,15 @@ public class KpiSubmissionController {
             @RequestParam(required = false) Long kpiDefinitionId,
             @RequestParam(required = false) String reportingPeriod,
             @RequestParam(required = false) SubmissionType submissionType,
-            @RequestParam(required = false) SubmissionReviewStatus reviewStatus
+            @RequestParam(required = false) SubmissionReviewStatus reviewStatus,
+            @RequestParam(required = false) Long committeeId
     ) {
         List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
                 kpiDefinitionId,
                 reportingPeriod,
                 submissionType,
-                reviewStatus
+                reviewStatus,
+                committeeId
         );
         return ResponseEntity.ok(responses);
     }
