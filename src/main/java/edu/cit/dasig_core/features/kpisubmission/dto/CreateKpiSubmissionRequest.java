@@ -2,6 +2,7 @@ package edu.cit.dasig_core.features.kpisubmission.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ public class CreateKpiSubmissionRequest {
     private String reportingPeriod;
 
     @NotNull(message = "Submitted value is required")
+    @PositiveOrZero(message = "Submitted value must not be negative")
     private Double submittedValue;
 
     @NotNull(message = "Submission date is required")
