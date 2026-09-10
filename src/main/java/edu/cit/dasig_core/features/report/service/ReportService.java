@@ -31,9 +31,11 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import java.io.ByteArrayOutputStream;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,6 +61,13 @@ public class ReportService {
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final CommitteeRepository committeeRepository;
     private final ObjectMapper objectMapper;
+
+    @Value("${app.business-timezone:Asia/Manila}")
+    private String businessTimezone;
+
+    private LocalDate today() {
+        return LocalDate.now(ZoneId.of(businessTimezone));
+    }
 
     public ReportResponse generateCommitteeReport(Long committeeId, LocalDate periodFrom, LocalDate periodTo) {
         validatePeriod(periodFrom, periodTo);
@@ -102,6 +111,9 @@ public class ReportService {
     private void validatePeriod(LocalDate periodFrom, LocalDate periodTo) {
         if (periodFrom.isAfter(periodTo)) {
             throw new IllegalArgumentException("Period from date must not be after period to date.");
+        }
+        if (periodTo.isAfter(today())) {
+            throw new IllegalArgumentException("Period to date must not be later than today.");
         }
     }
 
