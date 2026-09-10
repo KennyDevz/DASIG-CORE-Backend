@@ -82,6 +82,16 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
             List<SubmissionReviewStatus> reviewStatuses
     );
 
+    long countBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
+            Long userId,
+            List<SubmissionReviewStatus> reviewStatuses
+    );
+
+    List<KpiSubmission> findBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
+            Long userId,
+            List<SubmissionReviewStatus> reviewStatuses
+    );
+
     @Query("SELECT s.kpiDefinition.committee.id, COUNT(s) FROM KpiSubmission s WHERE s.kpiDefinition.committee.id IN :committeeIds AND s.reviewStatus = edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus.PENDING GROUP BY s.kpiDefinition.committee.id")
     List<Object[]> countPendingSubmissionsByCommitteeIds(@Param("committeeIds") List<Long> committeeIds);
 }

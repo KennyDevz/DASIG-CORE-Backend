@@ -9,6 +9,7 @@ import java.time.LocalDate;
 @Data
 public class KpiPeriodSubmissionEntryResponse {
     private Long id;
+    private String referenceCode;
     private SubmissionType submissionType;
     private Double submittedValue;
     private Double achievementRate;

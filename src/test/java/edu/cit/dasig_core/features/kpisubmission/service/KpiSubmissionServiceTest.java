@@ -417,19 +417,13 @@ class KpiSubmissionServiceTest {
     }
 
     @Test
-    void reviewSubmission_approvingCreatesOfficialFinalSubmissionAndPublishesEvent() {
+    void reviewSubmission_approvingPromotesOriginalSubmissionAndPublishesEvent() {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("TBI_MANAGER", 9L)));
         KpiSubmission submission = internalPendingSubmission(9L);
+        User originalSubmitter = submission.getSubmittedBy();
         when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
-        when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> {
-            KpiSubmission s = invocation.getArgument(0);
-            if (s.getId() == null) {
-                s.setId(200L);
-            }
-            return s;
-        });
-        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(false);
+        when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
                 .thenReturn(List.of());
         when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
@@ -440,25 +434,34 @@ class KpiSubmissionServiceTest {
         KpiSubmissionResponse response = kpiSubmissionService.reviewSubmission(1L, request);
 
         assertThat(response.getReviewStatus()).isEqualTo(SubmissionReviewStatus.APPROVED);
+        assertThat(response.getSubmissionType()).isEqualTo(SubmissionType.FINAL);
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(submission.getSubmittedBy()).isSameAs(originalSubmitter);
+        assertThat(submission.getSourceSubmission()).isNull();
+        verify(kpiSubmissionRepository, never()).existsBySourceSubmissionId(any());
         verify(eventPublisher).publishEvent(any(KpiSubmittedEvent.class));
     }
 
     @Test
-    void reviewSubmission_approvingDoesNotDuplicateOfficialSubmissionIfOneAlreadyExists() {
+    void reviewSubmission_approvingKeepsOriginalSubmissionId() {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("TBI_MANAGER", 9L)));
         KpiSubmission submission = internalPendingSubmission(9L);
         when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
         when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(true);
+        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
+                .thenReturn(List.of());
         when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
 
         ReviewKpiSubmissionRequest request = new ReviewKpiSubmissionRequest();
         request.setReviewStatus(SubmissionReviewStatus.APPROVED);
 
-        kpiSubmissionService.reviewSubmission(1L, request);
+        KpiSubmissionResponse response = kpiSubmissionService.reviewSubmission(1L, request);
 
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getSubmissionType()).isEqualTo(SubmissionType.FINAL);
+        verify(kpiSubmissionRepository, never()).existsBySourceSubmissionId(any());
+        verify(eventPublisher).publishEvent(any(KpiSubmittedEvent.class));
     }
 
     // ---- getDocumentForCurrentUser ----
@@ -490,12 +493,15 @@ class KpiSubmissionServiceTest {
     }
 
     @Test
-    void getDocumentForCurrentUser_staffCannotAccessFinalTypeDocuments() {
+    void getDocumentForCurrentUser_staffCannotAccessOtherUsersFinalTypeDocuments() {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("STAFF", 9L)));
 
         KpiSubmission submission = internalPendingSubmission(9L);
         submission.setSubmissionType(SubmissionType.FINAL);
+        User otherSubmitter = user("STAFF", 9L);
+        otherSubmitter.setId(99L);
+        submission.setSubmittedBy(otherSubmitter);
         SubmissionDocument document = new SubmissionDocument();
         document.setId(1L);
         document.setSubmission(submission);
@@ -504,6 +510,27 @@ class KpiSubmissionServiceTest {
         assertThatThrownBy(() -> kpiSubmissionService.getDocumentForCurrentUser(1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("You do not have access to this document.");
+    }
+
+    @Test
+    void getDocumentForCurrentUser_staffCanAccessOwnFinalTypeDocuments() {
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("STAFF", 9L)));
+
+        KpiSubmission submission = internalPendingSubmission(9L);
+        submission.setSubmissionType(SubmissionType.FINAL);
+        SubmissionDocument document = new SubmissionDocument();
+        document.setId(1L);
+        document.setFileName("approved.pdf");
+        document.setContentType("application/pdf");
+        document.setSubmission(submission);
+        when(submissionDocumentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(submissionDocumentService.downloadDocument(document)).thenReturn(new byte[]{9});
+
+        KpiSubmissionService.SubmissionDocumentDownload download = kpiSubmissionService.getDocumentForCurrentUser(1L);
+
+        assertThat(download.fileName()).isEqualTo("approved.pdf");
+        assertThat(download.content()).containsExactly(9);
     }
 
     @Test
@@ -559,7 +586,8 @@ class KpiSubmissionServiceTest {
         KpiSubmission submission = internalPendingSubmission(999L);
         when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
         when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(true);
+        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
+                .thenReturn(List.of());
         when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
 
         ReviewKpiSubmissionRequest request = new ReviewKpiSubmissionRequest();
@@ -605,7 +633,8 @@ class KpiSubmissionServiceTest {
         submission.setMemberViewed(true);
         when(kpiSubmissionRepository.findById(1L)).thenReturn(Optional.of(submission));
         when(kpiSubmissionRepository.save(any(KpiSubmission.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(kpiSubmissionRepository.existsBySourceSubmissionId(1L)).thenReturn(true);
+        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
+                .thenReturn(List.of());
         when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
 
         ReviewKpiSubmissionRequest request = new ReviewKpiSubmissionRequest();
@@ -644,9 +673,8 @@ class KpiSubmissionServiceTest {
         User staff = user("STAFF", 9L);
         staff.setId(42L);
         when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
-        when(kpiSubmissionRepository.countUnviewedReviewedSubmissions(
+        when(kpiSubmissionRepository.countBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
                 eq(42L),
-                eq(SubmissionType.INTERNAL),
                 anyList()
         )).thenReturn(3L);
 
@@ -668,9 +696,8 @@ class KpiSubmissionServiceTest {
         sub1.setSubmittedBy(staff);
         sub1.setMemberViewed(false);
 
-        when(kpiSubmissionRepository.findBySubmittedByIdAndSubmissionTypeAndReviewStatusInAndMemberViewedFalse(
+        when(kpiSubmissionRepository.findBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
                 eq(42L),
-                eq(SubmissionType.INTERNAL),
                 anyList()
         )).thenReturn(List.of(sub1));
 
