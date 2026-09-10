@@ -128,9 +128,12 @@ public class KpiSubmissionService {
             if (requestedSubmissionType == SubmissionType.FINAL) {
                 return submission.getSubmissionType() == SubmissionType.FINAL;
             }
+            if (requestedSubmissionType == SubmissionType.INTERNAL) {
+                return submission.getSubmissionType() == SubmissionType.INTERNAL
+                        && isSubmittedByCurrentUser(user, submission);
+            }
 
-            return submission.getSubmissionType() == SubmissionType.INTERNAL
-                    && isSubmittedByCurrentUser(user, submission);
+            return isSubmittedByCurrentUser(user, submission);
         }
         return true;
     }
@@ -272,18 +275,27 @@ public class KpiSubmissionService {
         }
 
         submission.setRejectionReason(null);
+        List<KpiSubmission> relatedFinalSubmissions = kpiSubmissionRepository
+                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
+                        submission.getKpiDefinition().getId(),
+                        submission.getOrganization().getId(),
+                        SubmissionType.FINAL
+                );
+        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateWithNewSubmission(
+                submission.getKpiDefinition(),
+                submission.getReportingPeriod(),
+                filterCountableSubmissions(relatedFinalSubmissions),
+                submission.getSubmittedValue()
+        );
+        submission.setSubmissionType(SubmissionType.FINAL);
+        submission.setAchievementRate(progress.achievementRate());
+        submission.setPerformanceStatus(progress.performanceStatus());
         KpiSubmission approvedSubmission = kpiSubmissionRepository.save(submission);
 
-        if (!kpiSubmissionRepository.existsBySourceSubmissionId(approvedSubmission.getId())) {
-            KpiSubmission officialSubmission = createOfficialSubmissionFromApprovedStaffSubmission(
-                    approvedSubmission,
-                    user
-            );
-            eventPublisher.publishEvent(new KpiSubmittedEvent(
-                    officialSubmission.getId(),
-                    BigDecimal.valueOf(officialSubmission.getSubmittedValue())
-            ));
-        }
+        eventPublisher.publishEvent(new KpiSubmittedEvent(
+                approvedSubmission.getId(),
+                BigDecimal.valueOf(approvedSubmission.getSubmittedValue())
+        ));
 
         return toResponse(approvedSubmission);
     }
@@ -308,7 +320,9 @@ public class KpiSubmissionService {
             throw new IllegalArgumentException("You do not have access to this document.");
         }
 
-        if ("STAFF".equals(user.getRole()) && submission.getSubmissionType() != SubmissionType.INTERNAL) {
+        if ("STAFF".equals(user.getRole())
+                && submission.getSubmissionType() != SubmissionType.INTERNAL
+                && !isSubmittedByCurrentUser(user, submission)) {
             throw new IllegalArgumentException("You do not have access to this document.");
         }
 
@@ -426,43 +440,6 @@ public class KpiSubmissionService {
         // Submissions are permitted even after the deadline (late submissions)
     }
 
-    private KpiSubmission createOfficialSubmissionFromApprovedStaffSubmission(
-            KpiSubmission staffSubmission,
-            User reviewer
-    ) {
-        List<KpiSubmission> relatedFinalSubmissions = kpiSubmissionRepository
-                .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
-                        staffSubmission.getKpiDefinition().getId(),
-                        staffSubmission.getOrganization().getId(),
-                        SubmissionType.FINAL
-                );
-
-        KpiPeriodProgress progress = KpiPeriodProgressCalculator.calculateWithNewSubmission(
-                staffSubmission.getKpiDefinition(),
-                staffSubmission.getReportingPeriod(),
-                filterCountableSubmissions(relatedFinalSubmissions),
-                staffSubmission.getSubmittedValue()
-        );
-
-        KpiSubmission officialSubmission = new KpiSubmission();
-        officialSubmission.setKpiDefinition(staffSubmission.getKpiDefinition());
-        officialSubmission.setOrganization(staffSubmission.getOrganization());
-        officialSubmission.setSubmittedBy(reviewer);
-        officialSubmission.setSubmittedValue(staffSubmission.getSubmittedValue());
-        officialSubmission.setReportingPeriod(staffSubmission.getReportingPeriod());
-        officialSubmission.setSubmissionDate(staffSubmission.getSubmissionDate());
-        officialSubmission.setNotes(staffSubmission.getNotes());
-        officialSubmission.setSubmissionType(SubmissionType.FINAL);
-        officialSubmission.setAchievementRate(progress.achievementRate());
-        officialSubmission.setPerformanceStatus(progress.performanceStatus());
-        officialSubmission.setReviewStatus(SubmissionReviewStatus.APPROVED);
-        officialSubmission.setReviewedBy(reviewer);
-        officialSubmission.setReviewedAt(LocalDateTime.now());
-        officialSubmission.setSourceSubmission(staffSubmission);
-
-        return saveWithReferenceCode(officialSubmission);
-    }
-
     private KpiSubmission saveWithReferenceCode(KpiSubmission submission) {
         KpiSubmission savedSubmission = kpiSubmissionRepository.save(submission);
         if (savedSubmission.getReferenceCode() == null || savedSubmission.getReferenceCode().isBlank()) {
@@ -506,9 +483,8 @@ public class KpiSubmissionService {
             );
             return new KpiSubmissionBadgeCountsResponse(pendingCount, 0L);
         } else if ("STAFF".equals(user.getRole())) {
-            long unreadReviewCount = kpiSubmissionRepository.countUnviewedReviewedSubmissions(
+            long unreadReviewCount = kpiSubmissionRepository.countBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
                     user.getId(),
-                    SubmissionType.INTERNAL,
                     List.of(SubmissionReviewStatus.APPROVED, SubmissionReviewStatus.REJECTED)
             );
             return new KpiSubmissionBadgeCountsResponse(0L, unreadReviewCount);
@@ -526,9 +502,8 @@ public class KpiSubmissionService {
                     .filter(s -> !s.isMemberViewed())
                     .toList();
         } else {
-            submissions = kpiSubmissionRepository.findBySubmittedByIdAndSubmissionTypeAndReviewStatusInAndMemberViewedFalse(
+            submissions = kpiSubmissionRepository.findBySubmittedByIdAndReviewStatusInAndMemberViewedFalse(
                     user.getId(),
-                    SubmissionType.INTERNAL,
                     List.of(SubmissionReviewStatus.APPROVED, SubmissionReviewStatus.REJECTED)
             );
         }

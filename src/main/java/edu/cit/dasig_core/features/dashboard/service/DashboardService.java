@@ -147,6 +147,7 @@ public class DashboardService {
     private KpiPeriodSubmissionEntryResponse toPeriodSubmissionEntry(KpiSubmission submission) {
         KpiPeriodSubmissionEntryResponse entry = new KpiPeriodSubmissionEntryResponse();
         entry.setId(submission.getId());
+        entry.setReferenceCode(submission.getReferenceCode());
         entry.setSubmissionType(submission.getSubmissionType());
         entry.setSubmittedValue(submission.getSubmittedValue());
         entry.setAchievementRate(submission.getAchievementRate());
