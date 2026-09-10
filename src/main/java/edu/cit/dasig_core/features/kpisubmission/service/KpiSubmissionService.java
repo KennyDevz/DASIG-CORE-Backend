@@ -300,6 +300,15 @@ public class KpiSubmissionService {
         return toResponse(approvedSubmission);
     }
 
+    // Unscoped by design: DASIG_ADMIN reports aggregate submissions across every committee/org,
+    // so a citation drawer needs to look up any submission by id, not just ones the caller owns.
+    @Transactional(readOnly = true)
+    public KpiSubmissionResponse getSubmissionForAdmin(Long submissionId) {
+        KpiSubmission submission = kpiSubmissionRepository.findById(submissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found."));
+        return toResponse(submission);
+    }
+
     @Transactional(readOnly = true)
     public SubmissionDocumentDownload getDocumentForCurrentUser(Long documentId) {
         User user = resolveCurrentUser();
@@ -326,6 +335,21 @@ public class KpiSubmissionService {
             throw new IllegalArgumentException("You do not have access to this document.");
         }
 
+        byte[] content = submissionDocumentService.downloadDocument(document);
+        return new SubmissionDocumentDownload(
+                document.getFileName(),
+                document.getContentType(),
+                content
+        );
+    }
+
+    // Unscoped counterpart to getDocumentForCurrentUser, for the same reason as
+    // getSubmissionForAdmin above — a DASIG_ADMIN report citation can point at a document
+    // belonging to any org/committee.
+    @Transactional(readOnly = true)
+    public SubmissionDocumentDownload getDocumentForAdmin(Long documentId) {
+        SubmissionDocument document = submissionDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission document not found."));
         byte[] content = submissionDocumentService.downloadDocument(document);
         return new SubmissionDocumentDownload(
                 document.getFileName(),

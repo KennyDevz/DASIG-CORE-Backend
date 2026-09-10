@@ -281,7 +281,7 @@ class ReportServiceTest {
         report.setNarrativeText("## Overall Performance Summary\n\nAll good.\n\n");
         report.setSectionsJson("""
                 [{"heading":"Overall Performance Summary","text":"All good.",
-                  "sources":[{"submissionId":142,"kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
+                  "sources":[{"submissionId":142,"submissionReference":"SUB-000142","kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
                               "submittedValue":8.0,"targetValue":25.0,"submissionDate":"2026-06-28"}]}]
                 """);
         when(reportRepository.findById("PR-2026-0008")).thenReturn(Optional.of(report));
@@ -305,12 +305,12 @@ class ReportServiceTest {
         report.setSectionsJson("""
                 [
                   {"heading":"Overall Performance Summary","text":"All good.",
-                    "sources":[{"submissionId":142,"kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
+                    "sources":[{"submissionId":142,"submissionReference":"SUB-000142","kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
                                 "submittedValue":8.0,"targetValue":25.0,"submissionDate":"2026-06-28"}]},
                   {"heading":"Underperforming KPIs","text":"See above.",
-                    "sources":[{"submissionId":142,"kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
+                    "sources":[{"submissionId":142,"submissionReference":"SUB-000142","kpiName":"Revenue Growth","organizationName":"Cebu TBI Hub",
                                 "submittedValue":8.0,"targetValue":25.0,"submissionDate":"2026-06-28"},
-                               {"submissionId":200,"kpiName":"Mentee Placement","organizationName":"Startup Incubator PH",
+                               {"submissionId":200,"submissionReference":"SUB-000200","kpiName":"Mentee Placement","organizationName":"Startup Incubator PH",
                                 "submittedValue":42.0,"targetValue":70.0,"submissionDate":"2026-06-30"}]}
                 ]
                 """);
@@ -322,8 +322,8 @@ class ReportServiceTest {
         String text = com.itextpdf.text.pdf.parser.PdfTextExtractor.getTextFromPage(reader, 1);
         reader.close();
 
-        assertThat(countOccurrences(text, "Submission #142")).isEqualTo(1);
-        assertThat(countOccurrences(text, "Submission #200")).isEqualTo(1);
+        assertThat(countOccurrences(text, "SUB-000142")).isEqualTo(1);
+        assertThat(countOccurrences(text, "SUB-000200")).isEqualTo(1);
         // Reference numbers are appended inline at the end of each section's text now, not on a
         // separate "Sources: ..." line — section 1 cites only #1, section 2 cites #1 and #2.
         assertThat(text).contains("[1]");
@@ -369,6 +369,7 @@ class ReportServiceTest {
 
         KpiSubmission submission = new KpiSubmission();
         submission.setId(142L);
+        submission.setReferenceCode("SUB-000142");
         submission.setKpiDefinition(kpi);
         submission.setOrganization(org);
         submission.setSubmittedValue(8.0);
@@ -424,6 +425,7 @@ class ReportServiceTest {
         // The hallucinated "REC-99" tag was dropped rather than failing the whole report
         assertThat(overallSummary.getSources()).hasSize(1);
         assertThat(overallSummary.getSources().get(0).getSubmissionId()).isEqualTo(142L);
+        assertThat(overallSummary.getSources().get(0).getSubmissionReference()).isEqualTo("SUB-000142");
         assertThat(overallSummary.getSources().get(0).getOrganizationName()).isEqualTo("Cebu TBI Hub");
         assertThat(overallSummary.getSources().get(0).getKpiName()).isEqualTo("Incubatee Revenue Growth");
         assertThat(overallSummary.getSources().get(0).getSubmittedValue()).isEqualTo(8.0);
@@ -431,6 +433,155 @@ class ReportServiceTest {
 
         assertThat(response.getNarrativeText()).contains("Cebu TBI Hub");
         assertThat(response.getNarrativeText()).doesNotContain("Org-42");
+    }
+
+    @Test
+    void generateCommitteeReport_resolvesOrgPseudonym_evenWhenModelDropsTheHyphenSeparator() {
+        Committee committee = new Committee();
+        committee.setId(1L);
+        committee.setName("Startup Committee");
+
+        Organization org = new Organization();
+        org.setId(42L);
+        org.setName("Cebu TBI Hub");
+        committee.setOrganizations(List.of(org));
+
+        LocalDate deadline = LocalDate.now().plusMonths(2);
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(7L);
+        kpi.setName("Startups Incubated");
+        kpi.setUnit("Count");
+        kpi.setTargetValue(50.0);
+        kpi.setThreshold(10.0);
+        kpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+        kpi.setDeadline(deadline);
+        kpi.setCommittee(committee);
+
+        String period = "Due by " + deadline.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH));
+
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(185L);
+        submission.setReferenceCode("SUB-000185");
+        submission.setKpiDefinition(kpi);
+        submission.setOrganization(org);
+        submission.setSubmittedValue(10.0);
+        submission.setReportingPeriod(period);
+        submission.setSubmissionDate(LocalDate.now());
+        submission.setSubmissionType(SubmissionType.FINAL);
+
+        when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
+        when(submissionRepository.findByOrganizationIdIn(List.of(42L))).thenReturn(List.of(submission));
+
+        // Observed in production: the model wrote "Org42" with no separator at all, instead of the
+        // instructed "Org-42". This must still resolve to the real name, not leak the pseudonym.
+        String llmResponse = """
+                {
+                  "sections": [
+                    {"heading": "Overall Performance Summary", "text": "Org42 delivered 10 startups this period.", "citedRecordTags": []},
+                    {"heading": "Underperforming KPIs", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Major Progress Points", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Recommendations", "text": "Keep going.", "citedRecordTags": []}
+                  ]
+                }
+                """;
+        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
+            Report report = invocation.getArgument(0);
+            report.setId("PR-2026-0083");
+            return report;
+        });
+
+        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(3));
+
+        String resolvedText = response.getSections().get(0).getText();
+        assertThat(resolvedText).contains("Cebu TBI Hub delivered 10 startups this period.");
+        assertThat(resolvedText).doesNotContain("Org42");
+        assertThat(resolvedText).doesNotContain("Org-42");
+    }
+
+    @Test
+    void generateCommitteeReport_computesEachOrganizationsCumulativeSeparately_whenTheySharedAKpi() {
+        Committee committee = new Committee();
+        committee.setId(1L);
+        committee.setName("Startup Committee");
+
+        Organization orgA = new Organization();
+        orgA.setId(10L);
+        orgA.setName("Org A");
+
+        Organization orgB = new Organization();
+        orgB.setId(20L);
+        orgB.setName("Org B");
+
+        committee.setOrganizations(List.of(orgA, orgB));
+
+        // A single KPI shared by both organizations under the committee, as is normal for this system.
+        LocalDate deadline = LocalDate.now().plusMonths(2);
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(7L);
+        kpi.setName("Startups Incubated");
+        kpi.setUnit("Count");
+        kpi.setTargetValue(50.0);
+        kpi.setThreshold(10.0);
+        kpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+        kpi.setDeadline(deadline);
+        kpi.setCommittee(committee);
+
+        String period = "Due by " + deadline.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH));
+
+        KpiSubmission submissionA = new KpiSubmission();
+        submissionA.setId(201L);
+        submissionA.setReferenceCode("SUB-000201");
+        submissionA.setKpiDefinition(kpi);
+        submissionA.setOrganization(orgA);
+        submissionA.setSubmittedValue(8.0);
+        submissionA.setReportingPeriod(period);
+        submissionA.setSubmissionDate(LocalDate.now());
+        submissionA.setSubmissionType(SubmissionType.FINAL);
+
+        KpiSubmission submissionB = new KpiSubmission();
+        submissionB.setId(202L);
+        submissionB.setReferenceCode("SUB-000202");
+        submissionB.setKpiDefinition(kpi);
+        submissionB.setOrganization(orgB);
+        submissionB.setSubmittedValue(20.0);
+        submissionB.setReportingPeriod(period);
+        submissionB.setSubmissionDate(LocalDate.now());
+        submissionB.setSubmissionType(SubmissionType.FINAL);
+
+        when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
+        when(submissionRepository.findByOrganizationIdIn(List.of(10L, 20L)))
+                .thenReturn(List.of(submissionA, submissionB));
+
+        String llmResponse = """
+                {
+                  "sections": [
+                    {"heading": "Overall Performance Summary", "text": "Summary.", "citedRecordTags": []},
+                    {"heading": "Underperforming KPIs", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Major Progress Points", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Recommendations", "text": "None.", "citedRecordTags": []}
+                  ]
+                }
+                """;
+        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
+            Report report = invocation.getArgument(0);
+            report.setId("PR-2026-0081");
+            return report;
+        });
+
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+
+        reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(3));
+
+        verify(llmApiClient).generateReport(promptCaptor.capture());
+        String sentPrompt = promptCaptor.getValue();
+
+        // Each organization's own cumulative must reflect only its own submission, never the
+        // committee-wide pooled total (8 + 20 = 28) that a missing organization filter would produce.
+        assertThat(sentPrompt).contains("Cumulative Value To Date: 8.00 Count");
+        assertThat(sentPrompt).contains("Cumulative Value To Date: 20.00 Count");
+        assertThat(sentPrompt).doesNotContain("Cumulative Value To Date: 28.00 Count");
     }
 
     @Test
@@ -468,6 +619,43 @@ class ReportServiceTest {
         assertThat(resolvedText).doesNotContain("REC-1");
         assertThat(resolvedText).contains("shows steady growth");
         assertThat(resolvedText).contains("this period");
+    }
+
+    @Test
+    void generateCommitteeReport_stripsUnresolvedOrgPseudonymsThatLeakIntoNarrativeText() {
+        Committee committee = new Committee();
+        committee.setId(1L);
+        committee.setName("Tech Committee");
+        // No organizations/submissions at all, so orgIdToName stays empty — any "Org-N" the model
+        // writes is necessarily unmapped (e.g. it hallucinated a reference it was never given data for).
+        committee.setOrganizations(List.of());
+        when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
+
+        String llmResponse = """
+                {
+                  "sections": [
+                    {"heading": "Overall Performance Summary", "text": "Org-99 has not submitted this period.", "citedRecordTags": []},
+                    {"heading": "Underperforming KPIs", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Major Progress Points", "text": "None.", "citedRecordTags": []},
+                    {"heading": "Recommendations", "text": "Keep going.", "citedRecordTags": []}
+                  ]
+                }
+                """;
+        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
+            Report report = invocation.getArgument(0);
+            report.setId("PR-2026-0010");
+            return report;
+        });
+
+        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+
+        assertThat(response.getStatus()).isEqualTo("GENERATED");
+        String resolvedText = response.getSections().get(0).getText();
+        // The internal pseudonym format must never reach the reader, even when it can't be resolved.
+        assertThat(resolvedText).doesNotContain("Org-99");
+        assertThat(resolvedText).doesNotContain("Org-");
+        assertThat(resolvedText).contains("the organization has not submitted this period");
     }
 
     @Test

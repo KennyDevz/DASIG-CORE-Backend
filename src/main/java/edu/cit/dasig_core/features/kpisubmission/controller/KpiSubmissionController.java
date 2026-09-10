@@ -110,6 +110,30 @@ public class KpiSubmissionController {
                 .body(document.content());
     }
 
+    // Backs the report citation drawer: DASIG_ADMIN needs to open the full record behind any
+    // source shown in a generated report, regardless of which org/committee it belongs to.
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
+    @GetMapping("/{submissionId}")
+    public ResponseEntity<KpiSubmissionResponse> getSubmission(@PathVariable Long submissionId) {
+        return ResponseEntity.ok(kpiSubmissionService.getSubmissionForAdmin(submissionId));
+    }
+
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
+    @GetMapping("/{submissionId}/documents/{documentId}/download")
+    public ResponseEntity<byte[]> downloadDocumentForAdmin(
+            @PathVariable Long submissionId,
+            @PathVariable Long documentId
+    ) {
+        SubmissionDocumentDownload document = kpiSubmissionService.getDocumentForAdmin(documentId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(document.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(document.fileName())
+                        .build()
+                        .toString())
+                .body(document.content());
+    }
+
     private KpiDefinitionResponse toKpiDefinitionResponse(KpiDefinition kpiDefinition) {
         KpiDefinitionResponse response = new KpiDefinitionResponse();
         response.setId(kpiDefinition.getId());

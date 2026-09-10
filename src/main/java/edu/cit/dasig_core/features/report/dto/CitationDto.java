@@ -16,6 +16,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class CitationDto {
     private Long submissionId;
+    private String submissionReference;
     private String kpiName;
     private String organizationName;
     private Double submittedValue;
