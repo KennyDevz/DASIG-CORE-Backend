@@ -3,6 +3,7 @@ package edu.cit.dasig_core.features.user.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.List;
 public class UpdateUserRequest {
 
     @NotBlank(message = "Name is required")
+    @Size(max = 255, message = "Name must not exceed 255 characters")
     private String name;
 
     @NotBlank(message = "Email is required")

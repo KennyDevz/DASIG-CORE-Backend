@@ -23,19 +23,19 @@ public class Organization {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 255)
     private String name; // e.g., "CIT-U Wildcat Innovation Labs"
 
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String address;
 
-    @Column(name = "contact_email", nullable = false)
+    @Column(name = "contact_email", nullable = false, length = 255)
     private String contactEmail;
 
-    @Column(name = "contact_number")
+    @Column(name = "contact_number", length = 30)
     private String contactNumber;
 
     @Column(nullable = false)
