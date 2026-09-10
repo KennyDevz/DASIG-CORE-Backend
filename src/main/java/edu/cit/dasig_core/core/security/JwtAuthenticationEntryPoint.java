@@ -16,8 +16,9 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
     public void commence(HttpServletRequest request,
                          HttpServletResponse response,
                          AuthenticationException authException) throws IOException, ServletException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
-        response.getWriter().write("{\"message\":\"Your session has expired or is invalid. Please log in again.\"}");
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getMessage());
+        //response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        //response.setContentType("application/json");
+        //response.getWriter().write("{\"message\":\"Your session has expired or is invalid. Please log in again.\"}");
     }
 }
