@@ -31,9 +31,11 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import java.io.ByteArrayOutputStream;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,7 +62,16 @@ public class ReportService {
     private final CommitteeRepository committeeRepository;
     private final ObjectMapper objectMapper;
 
+    @Value("${app.business-timezone:Asia/Manila}")
+    private String businessTimezone;
+
+    private LocalDate today() {
+        return LocalDate.now(ZoneId.of(businessTimezone));
+    }
+
     public ReportResponse generateCommitteeReport(Long committeeId, LocalDate periodFrom, LocalDate periodTo) {
+        validatePeriod(periodFrom, periodTo);
+
         Committee committee = committeeRepository.findById(committeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Committee not found with ID: " + committeeId));
 
@@ -79,6 +90,8 @@ public class ReportService {
     }
 
     public ReportResponse generateKpiReport(Long kpiDefinitionId, LocalDate periodFrom, LocalDate periodTo) {
+        validatePeriod(periodFrom, periodTo);
+
         // 1. Fetch the KPI to find out which committee owns it
         KpiDefinition kpi = kpiDefinitionRepository.findById(kpiDefinitionId)
                 .orElseThrow(() -> new IllegalArgumentException("KPI not found with ID: " + kpiDefinitionId));
@@ -90,6 +103,18 @@ public class ReportService {
                 + "covering all incubator organizations under the \"" + kpi.getCommittee().getName() + "\" committee that report on it.\n\n";
 
         return buildAndSaveReport(submissions, kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId, periodFrom, periodTo, contextHeader);
+    }
+
+    // Guards against an inverted range (periodFrom after periodTo), which would otherwise silently
+    // match zero submissions in buildAndSaveReport's date filter and produce an empty report
+    // instead of a clear error telling the caller to fix the dates.
+    private void validatePeriod(LocalDate periodFrom, LocalDate periodTo) {
+        if (periodFrom.isAfter(periodTo)) {
+            throw new IllegalArgumentException("Period from date must not be after period to date.");
+        }
+        if (periodTo.isAfter(today())) {
+            throw new IllegalArgumentException("Period to date must not be later than today.");
+        }
     }
 
     public ReportResponse getReport(String reportId) {

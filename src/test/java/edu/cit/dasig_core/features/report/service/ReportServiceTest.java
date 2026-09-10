@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -65,6 +66,7 @@ class ReportServiceTest {
         reportService = new ReportService(
                 submissionRepository, reportRepository, llmApiClient, kpiDefinitionRepository, committeeRepository,
                 objectMapper);
+        ReflectionTestUtils.setField(reportService, "businessTimezone", "Asia/Manila");
     }
 
     /** A minimal, schema-valid structured response with no citations — used where citation content doesn't matter. */
@@ -87,6 +89,26 @@ class ReportServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Committee not found with ID: 1");
 
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void generateCommitteeReport_throwsWhenPeriodFromIsAfterPeriodTo() {
+        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L, LocalDate.now(), LocalDate.now().minusDays(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Period from date must not be after period to date.");
+
+        verify(committeeRepository, never()).findById(any());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void generateCommitteeReport_throwsWhenPeriodToIsInTheFuture() {
+        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusDays(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Period to date must not be later than today.");
+
+        verify(committeeRepository, never()).findById(any());
         verify(reportRepository, never()).save(any());
     }
 
@@ -403,7 +425,7 @@ class ReportServiceTest {
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
 
         ReportResponse response = reportService.generateCommitteeReport(
-                1L, LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(3));
+                1L, LocalDate.now().minusMonths(1), LocalDate.now());
 
         verify(llmApiClient).generateReport(promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
@@ -491,7 +513,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(3));
+        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
 
         String resolvedText = response.getSections().get(0).getText();
         assertThat(resolvedText).contains("Cebu TBI Hub delivered 10 startups this period.");
@@ -572,7 +594,7 @@ class ReportServiceTest {
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
 
-        reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusMonths(3));
+        reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
 
         verify(llmApiClient).generateReport(promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
