@@ -202,8 +202,8 @@ public class ReportService {
 
                     for (int idx = 0; idx < orderedCitations.size(); idx++) {
                         CitationDto c = orderedCitations.get(idx);
-                        String line = (idx + 1) + ". " + c.getKpiName() + " (" + c.getOrganizationName() + ") — Submission #"
-                                + c.getSubmissionId() + ", " + c.getSubmissionDate().format(formatter);
+                        String line = (idx + 1) + ". " + c.getKpiName() + " (" + c.getOrganizationName() + ") — "
+                                + c.getSubmissionReference() + ", " + c.getSubmissionDate().format(formatter);
                         Paragraph sourceLine = new Paragraph(line, italicFont);
                         sourceLine.setSpacingAfter(4);
                         document.add(sourceLine);
@@ -478,7 +478,8 @@ public class ReportService {
         prompt.append("- The system uses a cumulative progression model over the reporting timeline.\n");
         prompt.append("- 'Period Contribution' is the raw value achieved solely during that specific interval.\n");
         prompt.append("- 'Cumulative Value To Date' is the running total of all contributions up to that period.\n");
-        prompt.append("- Performance Status (GREEN/ON_TRACK, YELLOW/AT_RISK, RED/DELAYED) and Achievement Rates are calculated strictly against the scaled cumulative targets and thresholds for that period, not the full annual target.\n");
+        prompt.append("- Achievement Rate is calculated against each record's Scaled Period Target below (the Overall Global Target prorated for how far the reporting timeline has progressed) — never against the Overall Global Target directly.\n");
+        prompt.append("- Performance Status (GREEN/ON_TRACK, YELLOW/AT_RISK, RED/DELAYED) works differently and is given to you pre-computed as \"Current Status\" per record — do not recompute or second-guess it, and never explain it using the Scaled Period Target. RED means the deadline has passed without reaching the Overall Global Target; YELLOW means the deadline is within 60 days and cumulative progress is under 50% of the Overall Global Target; GREEN covers every other case, including the target being fully reached.\n");
         prompt.append("- These figures represent official FINAL entries approved by the Committee Lead.\n\n");
 
         prompt.append("=== REPORT PARAMETERS ===\n");
@@ -503,9 +504,13 @@ public class ReportService {
                 tagToSubmission.put(recordTag, s);
                 orgIdToName.putIfAbsent(s.getOrganization().getId(), s.getOrganization().getName());
 
-                // Extract all historical FINAL submissions for this specific KPI to calculate accurate cumulative progress
+                // Extract this organization's historical FINAL submissions for this specific KPI to
+                // calculate its own cumulative progress. A KpiDefinition is shared by every organization
+                // under its committee, so this must also filter by organization — otherwise every
+                // organization's cumulative figure would be pooled together across the whole committee.
                 List<KpiSubmission> kpiHistory = allSubmissions.stream()
                         .filter(history -> history.getKpiDefinition().getId().equals(s.getKpiDefinition().getId())
+                                && history.getOrganization().getId().equals(s.getOrganization().getId())
                                 && history.getSubmissionType() == SubmissionType.FINAL)
                         .toList();
 
@@ -551,7 +556,7 @@ public class ReportService {
         prompt.append("Respond with a JSON object containing a \"sections\" array of exactly 4 objects, in this exact order, ");
         prompt.append("each with a \"heading\", a \"text\" (the narrative body), and a \"citedRecordTags\" array:\n");
         prompt.append("1. heading: \"Overall Performance Summary\" — analyze how the cumulative trajectory is moving across the window. Appreciate steady gains even if temporary periods look low due to contribution dips.\n");
-        prompt.append("2. heading: \"Underperforming KPIs\" — highlight instances where the cumulative value fails to surpass the expected period thresholds, marking them as DELAYED or AT_RISK.\n");
+        prompt.append("2. heading: \"Underperforming KPIs\" — highlight records whose Current Status is RED (DELAYED) or YELLOW (AT_RISK).\n");
         prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to ON_TRACK.\n");
         prompt.append("4. heading: \"Recommendations\" — provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.\n\n");
 
@@ -560,8 +565,14 @@ public class ReportService {
         prompt.append("- Cite every Record Tag whose submission materially supports that section's claims; omit tags that aren't relevant to that section.\n");
         prompt.append("- A section may have an empty \"citedRecordTags\" array if no submission is directly relevant (e.g. Recommendations may be general).\n\n");
 
+        prompt.append("=== DATA CONSISTENCY RULES (STRICT) ===\n");
+        prompt.append("- If an organization or KPI has more than one Record in the window, its 'Period Contribution' for that window is the SUM of all of those Records' raw values. Compute that sum yourself and use it — the same number — every time you state that organization's or KPI's period contribution, in every section and every table of this report.\n");
+        prompt.append("- Never show your arithmetic in the output (e.g. never write \"5 + 10 = 15\" in a table cell or in prose) — state only the final computed number.\n");
+        prompt.append("- In \"Major Progress Points\", if you are highlighting one specific standout Record rather than an organization's/KPI's full summed period contribution, do not label it \"Period Contribution\" — call it out by its own Reporting Period or describe it as a single notable submission, so it is never confused with the summed total used elsewhere.\n\n");
+
         prompt.append("=== TEXT FORMATTING RULES (apply inside each section's \"text\" field) ===\n");
-        prompt.append("- Refer to organizations only by their \"Org-N\" reference — never invent or guess a real organization name.\n");
+        prompt.append("- Refer to organizations only by their \"Org-N\" reference, written exactly like that — keep the hyphen, e.g. \"Org-3\", never \"Org3\" or \"Org 3\" — and never invent or guess a real organization name.\n");
+        prompt.append("- Only ever write an \"Org-N\" reference where N is the exact Organization Reference of a Record in the OFFICIAL KPI SUBMISSION RECORD above. Never reference an organization that has no Record there, even if you know from context (e.g. committee membership) that it exists — it has nothing to report for this window, so leave it unmentioned rather than citing a made-up reference for it.\n");
         prompt.append("- Never mention a Record Tag (e.g. \"REC-3\") anywhere inside \"text\" — Record Tags belong ONLY in the \"citedRecordTags\" array. Write the narrative as if the reader cannot see the tags at all.\n");
         prompt.append("- Do not include markdown headings (#, ##, or numbered headings) inside \"text\" — the heading is already provided as a separate JSON field.\n");
         prompt.append("- Do NOT use horizontal rule lines (e.g. \"---\" or \"***\") anywhere.\n");
@@ -569,7 +580,7 @@ public class ReportService {
         prompt.append("- For any tabular or columnar data (per-KPI breakdowns, comparisons, etc.), you MUST use a proper Markdown pipe table: a header row, then a \"|---|---|\" separator row, then data rows — never align columns with plain spaces.\n");
         prompt.append("- Use **bold** only to emphasize a handful of key terms or figures, and plain text otherwise. Avoid *italics* unless truly necessary. Never nest bold and italics together.\n");
         prompt.append("- Keep every hyphen in compound words exactly as written (e.g. \"period-specific\", \"real-time\") — do not drop them.\n");
-        prompt.append("- Write any date you mention in \"Month dd, yyyy\" format (e.g. \"August 1, 2026\"), matching the format already used for Submission Date above — never YYYY-MM-DD.\n");
+        prompt.append("- Write any date you mention in \"Month dd, yyyy\" format (e.g. \"August 01, 2026\", always two-digit day), matching the format already used for Submission Date above — never YYYY-MM-DD.\n");
 
         // Call Groq LLM API and parse its structured response
         String narrative;
@@ -638,6 +649,7 @@ public class ReportService {
                 }
                 sources.add(new CitationDto(
                         submission.getId(),
+                        submission.getReferenceCode(),
                         submission.getKpiDefinition().getName(),
                         submission.getOrganization().getName(),
                         submission.getSubmittedValue(),
@@ -646,7 +658,8 @@ public class ReportService {
                 ));
             }
 
-            String resolvedText = humanizeDates(stripRecordTagArtifacts(resolvePseudonyms(section.getText(), orgIdToName)));
+            String resolvedText = humanizeDates(stripRecordTagArtifacts(stripUnresolvedOrgPseudonyms(
+                    resolvePseudonyms(section.getText(), orgIdToName), section.getHeading())));
             result.add(new ReportSectionDto(section.getHeading(), resolvedText, sources));
         }
         return result;
@@ -657,18 +670,44 @@ public class ReportService {
     private static final Pattern RECORD_TAG_BARE = Pattern.compile("\\bREC-\\d+\\b");
     private static final Pattern ISO_DATE_PATTERN = Pattern.compile("\\b(\\d{4})-(\\d{2})-(\\d{2})\\b");
 
-    /** Replaces every "Org-<id>" pseudonym actually used in this report with the real organization name. */
+    // Matches "Org-3", "org 3", and "Org3" alike — the model doesn't reliably keep the exact
+    // "Org-N" separator/casing it was given (observed writing "Org1"/"Org2" with no separator at all).
+    private static final Pattern ORG_PSEUDONYM = Pattern.compile("\\bOrg[-\\s]?\\d+\\b", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Replaces every "Org-<id>" pseudonym actually used in this report with the real organization
+     * name, regardless of the exact separator/casing the model used between "Org" and the id.
+     */
     private String resolvePseudonyms(String text, Map<Long, String> orgIdToName) {
         if (text == null) {
             return null;
         }
         String resolved = text;
         for (Map.Entry<Long, String> entry : orgIdToName.entrySet()) {
-            resolved = resolved.replaceAll(
-                    "\\bOrg-" + entry.getKey() + "\\b",
-                    Matcher.quoteReplacement(entry.getValue()));
+            resolved = Pattern.compile("\\bOrg[-\\s]?" + entry.getKey() + "\\b", Pattern.CASE_INSENSITIVE)
+                    .matcher(resolved)
+                    .replaceAll(Matcher.quoteReplacement(entry.getValue()));
         }
         return resolved;
+    }
+
+    /**
+     * Safety net for any "Org-N" pseudonym that {@link #resolvePseudonyms} couldn't map to a real
+     * name — e.g. the model referenced an organization it was never given a record for (common in
+     * KPI-scoped reports, whose prompt invites discussion of "all organizations under the
+     * committee" even though only organizations with a submission in the window get a pseudonym
+     * mapping). The org identity behind an unmapped pseudonym is unrecoverable, so fall back to a
+     * generic phrase rather than ever leak the internal "Org-N" placeholder to a reader.
+     */
+    private String stripUnresolvedOrgPseudonyms(String text, String sectionHeading) {
+        if (text == null) {
+            return null;
+        }
+        String cleaned = ORG_PSEUDONYM.matcher(text).replaceAll("the organization");
+        if (!cleaned.equals(text)) {
+            log.warn("LLM referenced an unresolved organization pseudonym in section '{}' — replaced with a generic phrase", sectionHeading);
+        }
+        return cleaned;
     }
 
     /**
