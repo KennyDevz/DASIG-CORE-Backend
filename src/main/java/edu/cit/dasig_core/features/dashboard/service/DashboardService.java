@@ -117,7 +117,11 @@ public class DashboardService {
                     }
                     item.setSubmissions(periodSubmissions
                             .stream()
-                            .sorted(Comparator.comparing(KpiSubmission::getSubmissionType))
+                            .sorted(Comparator
+                                    .comparing(KpiSubmission::getSubmissionDate,
+                                            Comparator.nullsLast(Comparator.reverseOrder()))
+                                    .thenComparing(KpiSubmission::getDateCreated,
+                                            Comparator.nullsLast(Comparator.reverseOrder())))
                             .map(this::toPeriodSubmissionEntry)
                             .toList());
                     return item;
