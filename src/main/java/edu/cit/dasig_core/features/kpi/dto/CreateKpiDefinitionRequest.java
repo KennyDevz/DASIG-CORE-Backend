@@ -3,6 +3,7 @@ package edu.cit.dasig_core.features.kpi.dto;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -11,15 +12,18 @@ import java.time.LocalDate;
 public class CreateKpiDefinitionRequest {
 
     @NotBlank(message = "KPI name is required")
+    @Size(max = 255, message = "KPI name must not exceed 255 characters")
     private String name;
 
     @NotBlank(message = "Description is required")
+    @Size(max = 5000, message = "Description must not exceed 5000 characters")
     private String description;
 
     @NotNull(message = "Target value is required")
     private Double targetValue;
 
     @NotBlank(message = "Unit is required")
+    @Size(max = 255, message = "Unit must not exceed 255 characters")
     private String unit;
 
     @NotNull(message = "Deadline is required")

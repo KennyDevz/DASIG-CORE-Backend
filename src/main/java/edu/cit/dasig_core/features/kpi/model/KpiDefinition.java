@@ -25,7 +25,7 @@ public class KpiDefinition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String name;
 
     @Column(columnDefinition = "TEXT", nullable = false)
@@ -41,7 +41,7 @@ public class KpiDefinition {
     @Column(name = "target_value", nullable = false)
     private Double targetValue;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String unit; // e.g., Count, Percentage, Currency
 
     @Column(nullable = false)
