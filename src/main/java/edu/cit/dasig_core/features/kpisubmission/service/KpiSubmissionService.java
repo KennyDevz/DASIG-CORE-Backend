@@ -21,6 +21,7 @@ import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -44,6 +46,7 @@ public class KpiSubmissionService {
     private final SubmissionDocumentRepository submissionDocumentRepository;
     private final SubmissionDocumentService submissionDocumentService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ZoneId businessZone;
 
     public KpiSubmissionService(
             UserRepository userRepository,
@@ -52,7 +55,8 @@ public class KpiSubmissionService {
             KpiSubmissionRepository kpiSubmissionRepository,
             SubmissionDocumentRepository submissionDocumentRepository,
             SubmissionDocumentService submissionDocumentService,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            @Value("${app.business-timezone:Asia/Manila}") String businessTimezone
     ) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
@@ -61,6 +65,7 @@ public class KpiSubmissionService {
         this.submissionDocumentRepository = submissionDocumentRepository;
         this.submissionDocumentService = submissionDocumentService;
         this.eventPublisher = eventPublisher;
+        this.businessZone = ZoneId.of(businessTimezone);
     }
 
     @Transactional(readOnly = true)
@@ -179,7 +184,7 @@ public class KpiSubmissionService {
         )) {
             throw new IllegalArgumentException("Invalid reporting period for this KPI.");
         }
-        validateSubmissionDate(request.getSubmissionDate(), kpiDefinition.getDeadline());
+        validateSubmissionDate(request.getSubmissionDate(), kpiDefinition);
 
         List<KpiSubmission> relatedSubmissions = kpiSubmissionRepository
                 .findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
@@ -452,16 +457,23 @@ public class KpiSubmissionService {
         return SubmissionReviewStatus.APPROVED;
     }
 
-    private void validateSubmissionDate(LocalDate submissionDate, LocalDate deadline) {
+    private void validateSubmissionDate(LocalDate submissionDate, KpiDefinition kpiDefinition) {
         if (submissionDate == null) {
             throw new IllegalArgumentException("Submission date is required.");
         }
 
-        LocalDate today = LocalDate.now();
-        if (submissionDate.isBefore(today)) {
-            throw new IllegalArgumentException("Submission date cannot be before today.");
+        LocalDate kpiCreationDate = kpiDefinition.getDateCreated() != null
+                ? kpiDefinition.getDateCreated().toLocalDate()
+                : null;
+        LocalDate today = LocalDate.now(businessZone);
+
+        if (kpiCreationDate != null && submissionDate.isBefore(kpiCreationDate)) {
+            throw new IllegalArgumentException("Submission date cannot be before the KPI creation date.");
         }
-        // Submissions are permitted even after the deadline (late submissions)
+
+        if (submissionDate.isAfter(today)) {
+            throw new IllegalArgumentException("Submission date cannot be in the future.");
+        }
     }
 
     private KpiSubmission saveWithReferenceCode(KpiSubmission submission) {

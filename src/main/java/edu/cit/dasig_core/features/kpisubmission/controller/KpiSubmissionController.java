@@ -148,6 +148,7 @@ public class KpiSubmissionController {
             response.setCommitteeId(kpiDefinition.getCommittee().getId());
             response.setCommitteeName(kpiDefinition.getCommittee().getName());
         }
+        response.setCreatedAt(kpiDefinition.getDateCreated() != null ? kpiDefinition.getDateCreated().toLocalDate() : null);
         return response;
     }
 }
