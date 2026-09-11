@@ -61,7 +61,8 @@ class KpiSubmissionServiceTest {
     void setUp() {
         kpiSubmissionService = new KpiSubmissionService(
                 userRepository, organizationRepository, kpiAssignmentService,
-                kpiSubmissionRepository, submissionDocumentRepository, submissionDocumentService, eventPublisher);
+                kpiSubmissionRepository, submissionDocumentRepository, submissionDocumentService, eventPublisher,
+                "Asia/Manila");
     }
 
     @AfterEach
