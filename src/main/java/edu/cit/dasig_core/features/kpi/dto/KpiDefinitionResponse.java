@@ -21,4 +21,5 @@ public class KpiDefinitionResponse {
     private ReportingFrequency reportingFrequency;
     private String status;
     private boolean archived;
+    private LocalDate createdAt;
 }
