@@ -5,7 +5,7 @@ import org.springframework.stereotype.Repository;
 
 import edu.cit.dasig_core.features.organization.model.Organization;
 
-import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
@@ -14,4 +14,6 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     boolean existsByNameAndIdNot(String name, Long id);
 
+    // Automatically generates: WHERE contact_email LIKE %?
+    Optional<Organization> findByContactEmailEndingWith(String emailSuffix);
 }

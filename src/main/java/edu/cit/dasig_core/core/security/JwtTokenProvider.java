@@ -39,6 +39,7 @@ public class JwtTokenProvider {
                 .claim("role", userPrincipal.getAuthorities().iterator().next().getAuthority())
                 .claim("name", userPrincipal.getName())
                 .claim("mustChangePassword", userPrincipal.isMustChangePassword())
+                .claim("organizationId", userPrincipal.getOrganizationId())
                 .signWith(getSigningKey())
                 .compact();
     }

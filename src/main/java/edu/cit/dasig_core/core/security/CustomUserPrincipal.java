@@ -20,6 +20,10 @@ public class CustomUserPrincipal implements UserDetails {
         return user.getId();
     }
 
+    public Long getOrganizationId() {
+        return user.getOrganizationId();
+    }
+
     public String getName() {
         return user.getName();
     }

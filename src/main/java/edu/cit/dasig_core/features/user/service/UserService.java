@@ -107,6 +107,15 @@ public class UserService {
     }
 
     @Transactional
+    public void activateAccount(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
+        
+        user.setStatus("Active");
+        userRepository.save(user);
+    }
+
+    @Transactional
     public void changeOwnPassword(ChangePasswordRequest request) {
         User user = resolveCurrentUser();
 
@@ -176,6 +185,12 @@ public class UserService {
     public UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
+        return mapToResponse(user);
+    }
+
+    public UserResponse getUserByEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
         return mapToResponse(user);
     }
 }
