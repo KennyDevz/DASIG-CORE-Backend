@@ -170,7 +170,7 @@ public class DashboardService {
             return kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId());
         }
 
-        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+        if (canViewCommitteeWideProgress(user, kpiDefinition)) {
             List<Long> organizationIds = resolveCommitteeOrganizationIds(kpiDefinition.getCommittee());
             if (organizationIds.isEmpty()) {
                 return List.of();
@@ -380,7 +380,7 @@ public class DashboardService {
         item.setReportingPeriod(reportingPeriod);
         item.setKpiStatus(kpiDefinition.getStatus());
         item.setArchived(kpiDefinition.isArchived());
-        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+        if (canViewCommitteeWideProgress(user, kpiDefinition)) {
             item.setOrganizationBreakdowns(buildOrganizationBreakdowns(
                     kpiDefinition,
                     reportingPeriod,
@@ -395,7 +395,7 @@ public class DashboardService {
             User user,
             SubmissionType submissionType
     ) {
-        if ("TBI_MANAGER".equals(user.getRole()) && isAssignedCommitteeLead(user, kpiDefinition.getCommittee())) {
+        if (canViewCommitteeWideProgress(user, kpiDefinition)) {
             List<Long> organizationIds = resolveCommitteeOrganizationIds(kpiDefinition.getCommittee());
             if (organizationIds.isEmpty()) {
                 return List.of();
@@ -465,6 +465,19 @@ public class DashboardService {
                 && committee != null
                 && user.getCommittees() != null
                 && user.getCommittees().stream().anyMatch(c -> c.getId().equals(committee.getId()));
+    }
+
+    private boolean isStaffInCommitteeOrganization(User user, Committee committee) {
+        return "STAFF".equals(user.getRole())
+                && committee != null
+                && committee.getOrganizations() != null
+                && user.getOrganizationId() != null
+                && committee.getOrganizations().stream().anyMatch(org -> org.getId().equals(user.getOrganizationId()));
+    }
+
+    private boolean canViewCommitteeWideProgress(User user, KpiDefinition kpiDefinition) {
+        Committee committee = kpiDefinition.getCommittee();
+        return isAssignedCommitteeLead(user, committee) || isStaffInCommitteeOrganization(user, committee);
     }
 
     private List<Long> resolveCommitteeOrganizationIds(Committee committee) {
