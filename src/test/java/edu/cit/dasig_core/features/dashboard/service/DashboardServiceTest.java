@@ -10,6 +10,7 @@ import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.dashboard.dto.KpiPeriodHistoryResponse;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.util.PerformanceStatusClassifier;
 import edu.cit.dasig_core.features.organization.repository.OrganizationRepository;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
@@ -326,19 +327,19 @@ class DashboardServiceTest {
         submitter.setName("Submitter User");
         submitter.setRole("STAFF");
 
-        KpiSubmission legacySubmission = new KpiSubmission();
-        legacySubmission.setId(101L);
-        legacySubmission.setKpiDefinition(oneTimeKpi);
-        legacySubmission.setSubmissionType(SubmissionType.FINAL);
-        legacySubmission.setSubmittedValue(50.0);
-        legacySubmission.setAchievementRate(50.0);
-        legacySubmission.setPerformanceStatus("GREEN");
-        legacySubmission.setReportingPeriod("Due by Sep 15, 2026");
-        legacySubmission.setSubmissionDate(LocalDate.of(2026, 8, 20));
-        legacySubmission.setSubmittedBy(submitter);
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(101L);
+        submission.setKpiDefinition(oneTimeKpi);
+        submission.setSubmissionType(SubmissionType.FINAL);
+        submission.setSubmittedValue(50.0);
+        submission.setAchievementRate(50.0);
+        submission.setPerformanceStatus(PerformanceStatusClassifier.ON_TRACK);
+        submission.setReportingPeriod("Due by Sep 15, 2026");
+        submission.setSubmissionDate(LocalDate.of(2026, 8, 20));
+        submission.setSubmittedBy(submitter);
 
         when(kpiDefinitionRepository.findById(10L)).thenReturn(Optional.of(oneTimeKpi));
-        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(legacySubmission));
+        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(submission));
 
         KpiPeriodHistoryResponse history = dashboardService.getKpiPeriodHistory(10L, null);
 
