@@ -504,7 +504,7 @@ public class ReportService {
         prompt.append("- 'Period Contribution' is the raw value achieved solely during that specific interval.\n");
         prompt.append("- 'Cumulative Value To Date' is the running total of all contributions up to that period.\n");
         prompt.append("- Achievement Rate is calculated against each record's Scaled Period Target below (the Overall Global Target prorated for how far the reporting timeline has progressed) — never against the Overall Global Target directly.\n");
-        prompt.append("- Performance Status (GREEN/ON_TRACK, YELLOW/AT_RISK, RED/DELAYED) works differently and is given to you pre-computed as \"Current Status\" per record — do not recompute or second-guess it, and never explain it using the Scaled Period Target. RED means the deadline has passed without reaching the Overall Global Target; YELLOW means the deadline is within 60 days and cumulative progress is under 50% of the Overall Global Target; GREEN covers every other case, including the target being fully reached.\n");
+        prompt.append("- Performance Status (COMPLETED, ON_TRACK, AT_RISK, OVERDUE) works differently and is given to you pre-computed as \"Current Status\" per record — do not recompute or second-guess it, and never explain it using the Scaled Period Target. COMPLETED means the Overall Global Target has been fully reached; OVERDUE means the deadline has passed without reaching the Overall Global Target; AT_RISK means the deadline is within 60 days and cumulative progress is under 50% of the Overall Global Target; ON_TRACK covers every other case (active, progressing, time remaining).\n");
         prompt.append("- These figures represent official FINAL entries approved by the Committee Lead.\n\n");
 
         prompt.append("=== REPORT PARAMETERS ===\n");
@@ -581,8 +581,8 @@ public class ReportService {
         prompt.append("Respond with a JSON object containing a \"sections\" array of exactly 4 objects, in this exact order, ");
         prompt.append("each with a \"heading\", a \"text\" (the narrative body), and a \"citedRecordTags\" array:\n");
         prompt.append("1. heading: \"Overall Performance Summary\" — analyze how the cumulative trajectory is moving across the window. Appreciate steady gains even if temporary periods look low due to contribution dips.\n");
-        prompt.append("2. heading: \"Underperforming KPIs\" — highlight records whose Current Status is RED (DELAYED) or YELLOW (AT_RISK).\n");
-        prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to ON_TRACK.\n");
+        prompt.append("2. heading: \"Underperforming KPIs\" — highlight records whose Current Status is OVERDUE or AT_RISK.\n");
+        prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to ON_TRACK or COMPLETED.\n");
         prompt.append("4. heading: \"Recommendations\" — provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.\n\n");
 
         prompt.append("=== CITATION RULES (STRICT) ===\n");
@@ -596,6 +596,7 @@ public class ReportService {
         prompt.append("- In \"Major Progress Points\", if you are highlighting one specific standout Record rather than an organization's/KPI's full summed period contribution, do not label it \"Period Contribution\" — call it out by its own Reporting Period or describe it as a single notable submission, so it is never confused with the summed total used elsewhere.\n\n");
 
         prompt.append("=== TEXT FORMATTING RULES (apply inside each section's \"text\" field) ===\n");
+        prompt.append("- Use only these status names: COMPLETED, ON_TRACK, AT_RISK, and OVERDUE. Do not mention GREEN, YELLOW, RED, or color-coded status names.\n");
         prompt.append("- Refer to organizations only by their \"Org-N\" reference, written exactly like that — keep the hyphen, e.g. \"Org-3\", never \"Org3\" or \"Org 3\" — and never invent or guess a real organization name.\n");
         prompt.append("- Only ever write an \"Org-N\" reference where N is the exact Organization Reference of a Record in the OFFICIAL KPI SUBMISSION RECORD above. Never reference an organization that has no Record there, even if you know from context (e.g. committee membership) that it exists — it has nothing to report for this window, so leave it unmentioned rather than citing a made-up reference for it.\n");
         prompt.append("- Never mention a Record Tag (e.g. \"REC-3\") anywhere inside \"text\" — Record Tags belong ONLY in the \"citedRecordTags\" array. Write the narrative as if the reader cannot see the tags at all.\n");
