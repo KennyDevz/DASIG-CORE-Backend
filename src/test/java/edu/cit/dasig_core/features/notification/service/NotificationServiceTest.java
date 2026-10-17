@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.notification.service;
 
+import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -29,6 +31,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -121,6 +125,7 @@ class NotificationServiceTest {
         notification.setNotificationType(NotificationType.SEVEN_DAYS_BEFORE);
         notification.setStatus(Notification.STATUS_UNREAD);
         notification.setMessage("msg");
+        notification.setAlertId(7L);
 
         when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpiWithDeadline(LocalDate.now())));
@@ -129,6 +134,7 @@ class NotificationServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getOrganizationId()).isEqualTo(9L);
+        assertThat(result.get(0).getAlertId()).isEqualTo(7L);
     }
 
     @Test
@@ -250,15 +256,18 @@ class NotificationServiceTest {
         org.setId(9L);
         kpi.getCommittee().setOrganizations(List.of(org));
 
-        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(
-                1L, 9L, NotificationType.SEVEN_DAYS_BEFORE)).thenReturn(false);
+        String expectedKey = "SEVEN_DAYS_BEFORE:" + kpi.getDeadline();
+        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(
+                1L, 9L, expectedKey)).thenReturn(false);
 
         notificationService.createDeadlineNotificationsForKpi(kpi);
 
         verify(notificationRepository).save(argThat(n ->
                 n.getNotificationType() == NotificationType.SEVEN_DAYS_BEFORE
                         && n.getOrganizationId().equals(9L)
-                        && n.getKpiDefinitionId().equals(1L)));
+                        && n.getKpiDefinitionId().equals(1L)
+                        && expectedKey.equals(n.getDedupeKey())
+                        && n.getAlertId() == null));
     }
 
     @Test
@@ -268,8 +277,8 @@ class NotificationServiceTest {
         org.setId(9L);
         kpi.getCommittee().setOrganizations(List.of(org));
 
-        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndNotificationType(
-                1L, 9L, NotificationType.SEVEN_DAYS_BEFORE)).thenReturn(true);
+        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(
+                1L, 9L, "SEVEN_DAYS_BEFORE:" + kpi.getDeadline())).thenReturn(true);
 
         notificationService.createDeadlineNotificationsForKpi(kpi);
 
@@ -294,5 +303,96 @@ class NotificationServiceTest {
         notificationService.createDeadlineNotificationsForKpi(kpi);
 
         verifyNoInteractions(organizationRepository, notificationRepository);
+    }
+
+    // ---- Alert notifications (UC-4.3) ----
+
+    private KpiDefinition kpiForCommittee() {
+        KpiDefinition kpi = kpiWithDeadline(LocalDate.of(2026, 5, 1));
+        Organization orgA = new Organization();
+        orgA.setId(10L);
+        Organization orgB = new Organization();
+        orgB.setId(11L);
+        kpi.getCommittee().setOrganizations(List.of(orgA, orgB));
+        return kpi;
+    }
+
+    private Alert alert(String type) {
+        Alert alert = new Alert();
+        alert.setId(7L);
+        alert.setAlertType(type);
+        return alert;
+    }
+
+    @Test
+    void notifyAlertCreated_sendsOverdueToEveryOrganizationInCommittee() {
+        notificationService.notifyAlertCreated(kpiForCommittee(), alert(Alert.TYPE_OVERDUE));
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(Notification::getOrganizationId).containsExactly(10L, 11L);
+        Notification first = saved.getAllValues().get(0);
+        assertThat(first.getNotificationType()).isEqualTo(NotificationType.OVERDUE);
+        assertThat(first.getAlertId()).isEqualTo(7L);
+        assertThat(first.getDedupeKey()).isEqualTo("OVERDUE:alert-7");
+        assertThat(first.getMessage()).contains("Revenue Target").contains("May 01, 2026");
+    }
+
+    @Test
+    void notifyAlertCreated_skipsOrganizationsAlreadyNotified() {
+        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(1L, 10L, "AT_RISK:alert-7"))
+                .thenReturn(true);
+        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(1L, 11L, "AT_RISK:alert-7"))
+                .thenReturn(false);
+
+        notificationService.notifyAlertCreated(kpiForCommittee(), alert(Alert.TYPE_AT_RISK));
+
+        verify(notificationRepository, times(1)).save(argThat(n -> n.getOrganizationId().equals(11L)));
+    }
+
+    @Test
+    void notifyAlertAcknowledged_includesAdminRemark() {
+        Alert alert = alert(Alert.TYPE_AT_RISK);
+        alert.setAdminRemark("Please submit your progress this week.");
+
+        notificationService.notifyAlertAcknowledged(kpiForCommittee(), alert);
+
+        verify(notificationRepository, times(2)).save(argThat(n ->
+                n.getNotificationType() == NotificationType.ALERT_ACKNOWLEDGED
+                        && n.getMessage().contains("Please submit your progress this week.")));
+    }
+
+    @Test
+    void notifyAlertAcknowledged_addsRemarkToExistingAlertNotification_andMarksUnread() {
+        Notification overdueCard = new Notification();
+        overdueCard.setNotificationType(NotificationType.OVERDUE);
+        overdueCard.setStatus(Notification.STATUS_READ);
+        overdueCard.setMessage("Overdue: KPI \"Revenue Target\" passed its deadline.");
+        when(notificationRepository.findByAlertIdAndNotificationTypeIn(eq(7L), anyCollection()))
+                .thenReturn(List.of(overdueCard));
+
+        Alert alert = alert(Alert.TYPE_OVERDUE);
+        alert.setAdminRemark("Please do something");
+        notificationService.notifyAlertAcknowledged(kpiForCommittee(), alert);
+
+        assertThat(overdueCard.getMessage())
+                .endsWith("The Admin acknowledged this alert. Remark: \"Please do something\"");
+        assertThat(overdueCard.getStatus()).isEqualTo(Notification.STATUS_UNREAD);
+        verify(notificationRepository).saveAll(List.of(overdueCard));
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void notifyDeadlineUpdated_includesOldAndNewDatesAndRemark() {
+        notificationService.notifyDeadlineUpdated(kpiForCommittee(),
+                LocalDate.of(2026, 5, 1), LocalDate.of(2026, 6, 30), "Extended by one month.");
+
+        verify(notificationRepository, times(2)).save(argThat(n ->
+                n.getNotificationType() == NotificationType.DEADLINE_UPDATED
+                        && n.getDedupeKey().equals("DEADLINE_UPDATED:2026-05-01->2026-06-30")
+                        && n.getAlertId() == null
+                        && n.getMessage().contains("May 01, 2026")
+                        && n.getMessage().contains("Jun 30, 2026")
+                        && n.getMessage().contains("Extended by one month.")));
     }
 }

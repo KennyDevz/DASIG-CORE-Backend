@@ -15,9 +15,12 @@ public class NotificationDetailResponse {
     private Long organizationId;
     private String organizationName;
     private NotificationType notificationType;
-    private int daysBeforeDeadline;
+    /** Only set for deadline reminders; null for alert-related notification types. */
+    private Integer daysBeforeDeadline;
     private LocalDate deadline;
     private String status;
     private String message;
     private LocalDateTime createdAt;
+    /** The alert this notification is about (At Risk, Overdue, Alert Acknowledged); null otherwise. */
+    private Long alertId;
 }

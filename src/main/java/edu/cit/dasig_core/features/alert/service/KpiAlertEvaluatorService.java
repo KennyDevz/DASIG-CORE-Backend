@@ -4,10 +4,11 @@ import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
-import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPaceCalculator;
+import edu.cit.dasig_core.features.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,18 +16,31 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+/**
+ * Creates and resolves KPI alerts (UC-4.1).
+ * Runs nightly, after each submission, and when the Admin opens the Alerts page.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class KpiAlertEvaluatorService {
 
+    public static final String REASON_TARGET_MET = "Target met";
+    public static final String REASON_TARGET_MET_LATE = "Target met after deadline";
+    public static final String REASON_ESCALATED = "Escalated to Overdue";
+    public static final String REASON_RECOVERED = "Progress recovered";
+
+    private static final List<String> OPEN_STATUSES =
+            List.of(Alert.STATUS_UNACKNOWLEDGED, Alert.STATUS_ACKNOWLEDGED);
+
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final AlertRepository alertRepository;
+    private final NotificationService notificationService;
 
     @Value("${app.business-timezone:Asia/Manila}")
     private String businessTimezone;
@@ -37,83 +51,77 @@ public class KpiAlertEvaluatorService {
 
     @Transactional
     public void evaluateAllKpiAlerts() {
-        List<KpiDefinition> kpiDefinitions = kpiDefinitionRepository.findAll();
-        LocalDate now = today();
-
-        for (KpiDefinition kpi : kpiDefinitions) {
-            if (kpi.getDeadline() == null || kpi.isArchived()) {
-                continue;
-            }
-
-            // Sum all approved official final submissions for this KPI
-            List<KpiSubmission> finalSubmissions = kpiSubmissionRepository
-                    .findByKpiDefinitionIdAndSubmissionType(kpi.getId(), SubmissionType.FINAL);
-
-            double cumulativeSubmitted = finalSubmissions.stream()
-                    .filter(s -> s.getReviewStatus() == null || s.getReviewStatus() == SubmissionReviewStatus.APPROVED)
-                    .mapToDouble(s -> s.getSubmittedValue() != null ? s.getSubmittedValue() : 0.0)
-                    .sum();
-
-            double target = kpi.getTargetValue() != null ? kpi.getTargetValue() : 0.0;
-            boolean targetAchieved = target > 0 && cumulativeSubmitted >= target;
-
-            // If target is met, no overdue or at-risk alerts needed
-            if (targetAchieved) {
-                continue;
-            }
-
-            long daysUntilDeadline = ChronoUnit.DAYS.between(now, kpi.getDeadline());
-
-            // 1. OVERDUE (Critical): Deadline passed without reaching target
-            if (daysUntilDeadline < 0) {
-                ensureSingleAlert(kpi, Alert.TYPE_OVERDUE, Alert.SEVERITY_CRITICAL);
-            }
-            // 2. AT RISK (Warning): Deadline <= 60 days AND progress < 50%
-            else if (daysUntilDeadline <= 60) {
-                double progressRatio = target > 0 ? cumulativeSubmitted / target : 0.0;
-                if (progressRatio < 0.50) {
-                    ensureSingleAlert(kpi, Alert.TYPE_AT_RISK, Alert.SEVERITY_WARNING);
-                }
+        LocalDate today = today();
+        for (KpiDefinition kpi : kpiDefinitionRepository.findAll()) {
+            if (kpi.getDeadline() != null && !kpi.isArchived()) {
+                evaluateKpi(kpi, today);
             }
         }
     }
 
-    private void ensureSingleAlert(KpiDefinition kpi, String alertType, String severity) {
-        List<Alert> existingAlerts = alertRepository.findByKpiDefinitionIdAndAlertType(kpi.getId(), alertType);
+    private void evaluateKpi(KpiDefinition kpi, LocalDate today) {
+        double actual = approvedTotal(kpi);
+        double target = kpi.getTargetValue() != null ? kpi.getTargetValue() : 0.0;
+        boolean deadlinePassed = today.isAfter(kpi.getDeadline());
+        List<Alert> openAlerts = alertRepository.findByKpiDefinitionIdAndStatusIn(kpi.getId(), OPEN_STATUSES);
 
-        if (!existingAlerts.isEmpty()) {
-            // If duplicate alerts exist in the database for this KPI and alertType, clean them up!
-            if (existingAlerts.size() > 1) {
-                boolean hasAcknowledged = existingAlerts.stream()
-                        .anyMatch(a -> Alert.STATUS_ACKNOWLEDGED.equals(a.getStatus()));
+        if (target > 0 && actual >= target) {
+            // 1. Target met -> close every open alert
+            String reason = deadlinePassed ? REASON_TARGET_MET_LATE : REASON_TARGET_MET;
+            openAlerts.forEach(alert -> resolve(alert, reason));
+        } else if (deadlinePassed) {
+            // 2. Deadline passed -> At Risk becomes Overdue
+            resolveOpen(openAlerts, Alert.TYPE_AT_RISK, REASON_ESCALATED);
+            createIfMissing(kpi, openAlerts, Alert.TYPE_OVERDUE, Alert.SEVERITY_CRITICAL);
+        } else if (KpiPaceCalculator.isAtRisk(actual, target, startDate(kpi), kpi.getDeadline(), today)) {
+            // 3. Behind pace -> At Risk
+            createIfMissing(kpi, openAlerts, Alert.TYPE_AT_RISK, Alert.SEVERITY_WARNING);
+        } else {
+            // 4. Back on pace -> close At Risk
+            resolveOpen(openAlerts, Alert.TYPE_AT_RISK, REASON_RECOVERED);
+        }
+    }
 
-                if (hasAcknowledged) {
-                    List<Alert> toDelete = existingAlerts.stream()
-                            .filter(a -> Alert.STATUS_UNACKNOWLEDGED.equals(a.getStatus()))
-                            .toList();
-                    alertRepository.deleteAll(toDelete);
-                } else {
-                    List<Alert> toDelete = existingAlerts.subList(1, existingAlerts.size());
-                    alertRepository.deleteAll(toDelete);
-                }
-            }
-            // Alert already exists (acknowledged or active); do NOT create duplicate
+    /** Sum of approved FINAL submissions from all organizations under the KPI's committee. */
+    private double approvedTotal(KpiDefinition kpi) {
+        return kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(kpi.getId(), SubmissionType.FINAL)
+                .stream()
+                .filter(s -> s.getReviewStatus() == null || s.getReviewStatus() == SubmissionReviewStatus.APPROVED)
+                .mapToDouble(s -> s.getSubmittedValue() != null ? s.getSubmittedValue() : 0.0)
+                .sum();
+    }
+
+    private LocalDate startDate(KpiDefinition kpi) {
+        return kpi.getDateCreated() != null ? kpi.getDateCreated().toLocalDate() : null;
+    }
+
+    private void createIfMissing(KpiDefinition kpi, List<Alert> openAlerts, String type, String severity) {
+        boolean exists = openAlerts.stream().anyMatch(a -> type.equals(a.getAlertType()));
+        if (exists) {
             return;
         }
-
-        // No alert exists yet: create one
-        createAlertForKpi(kpi, alertType, severity, null);
-    }
-
-    private void createAlertForKpi(KpiDefinition kpi, String alertType, String severity, Long submissionId) {
         Alert alert = new Alert();
         alert.setKpiDefinitionId(kpi.getId());
-        alert.setSubmissionId(submissionId);
-        alert.setAlertType(alertType);
+        alert.setAlertType(type);
         alert.setSeverity(severity);
         alert.setStatus(Alert.STATUS_UNACKNOWLEDGED);
-
         alertRepository.save(alert);
-        log.info("Created {} alert (severity: {}) for KPI: {}", alertType, severity, kpi.getName());
+        log.info("Created {} alert for KPI: {}", type, kpi.getName());
+
+        notificationService.notifyAlertCreated(kpi, alert);
+    }
+
+    private void resolveOpen(List<Alert> openAlerts, String type, String reason) {
+        openAlerts.stream()
+                .filter(a -> type.equals(a.getAlertType()))
+                .forEach(a -> resolve(a, reason));
+    }
+
+    private void resolve(Alert alert, String reason) {
+        alert.setStatus(Alert.STATUS_RESOLVED);
+        alert.setResolvedAt(LocalDateTime.now(ZoneId.of(businessTimezone)));
+        alert.setResolutionReason(reason);
+        alertRepository.save(alert);
+        log.info("Resolved {} alert {} ({})", alert.getAlertType(), alert.getId(), reason);
     }
 }

@@ -9,8 +9,13 @@ import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
+import edu.cit.dasig_core.features.alert.repository.OverdueExplanationRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
@@ -19,6 +24,7 @@ import edu.cit.dasig_core.features.notification.service.NotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,6 +38,9 @@ public class KpiDefinitionService {
     private final AlertRepository alertRepository;
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final SubmissionDocumentRepository submissionDocumentRepository;
+    private final OverdueExplanationRepository overdueExplanationRepository;
+
+    private static final DateTimeFormatter DEADLINE_FORMAT = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH);
 
     public KpiDefinitionService(
             KpiDefinitionRepository kpiDefinitionRepository,
@@ -40,7 +49,8 @@ public class KpiDefinitionService {
             NotificationRepository notificationRepository,
             AlertRepository alertRepository,
             KpiSubmissionRepository kpiSubmissionRepository,
-            SubmissionDocumentRepository submissionDocumentRepository
+            SubmissionDocumentRepository submissionDocumentRepository,
+            OverdueExplanationRepository overdueExplanationRepository
     ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
         this.committeeRepository = committeeRepository;
@@ -49,6 +59,7 @@ public class KpiDefinitionService {
         this.alertRepository = alertRepository;
         this.kpiSubmissionRepository = kpiSubmissionRepository;
         this.submissionDocumentRepository = submissionDocumentRepository;
+        this.overdueExplanationRepository = overdueExplanationRepository;
     }
 
     @Transactional
@@ -75,6 +86,12 @@ public class KpiDefinitionService {
     public KpiDefinitionResponse updateKpiDefinition(Long id, UpdateKpiDefinitionRequest request) {
         KpiDefinition kpiDef = kpiDefinitionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("KPI Definition not found with ID: " + id));
+
+        LocalDate oldDeadline = kpiDef.getDeadline();
+        boolean deadlineChanged = !request.getDeadline().equals(oldDeadline);
+        if (deadlineChanged && request.getDeadline().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("New deadline cannot be in the past.");
+        }
 
         kpiDef.setName(request.getName());
         kpiDef.setDescription(request.getDescription());
@@ -105,6 +122,12 @@ public class KpiDefinitionService {
             }
         }
 
+        if (deadlineChanged) {
+            String latestRemark = resolveOpenAlerts(id, updatedKpiDef.getDeadline());
+            notificationService.notifyDeadlineUpdated(updatedKpiDef, oldDeadline, updatedKpiDef.getDeadline(), latestRemark);
+        }
+
+        // Creates reminders for the new deadline (old ones stay as history)
         notificationService.createDeadlineNotificationsForKpi(updatedKpiDef);
         return mapToResponse(updatedKpiDef);
     }
@@ -147,7 +170,8 @@ public class KpiDefinitionService {
         // 1. Delete notifications
         notificationRepository.deleteByKpiDefinitionId(id);
 
-        // 2. Delete alerts
+        // 2. Delete overdue explanations, then alerts
+        overdueExplanationRepository.deleteByKpiDefinitionId(id);
         alertRepository.deleteByKpiDefinitionId(id);
 
         // 3. Delete submissions and associated documents/alerts
@@ -189,6 +213,31 @@ public class KpiDefinitionService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Closes open Overdue / At Risk alerts when the Admin changes the deadline (UC-2.2).
+     * The next alert evaluation creates a new alert if the KPI is still behind.
+     *
+     * @return the latest Admin remark on those alerts, or null if there is none
+     */
+    private String resolveOpenAlerts(Long kpiId, LocalDate newDeadline) {
+        String reason = "Deadline changed to " + newDeadline.format(DEADLINE_FORMAT);
+        List<Alert> openAlerts = alertRepository.findByKpiDefinitionIdAndStatusIn(
+                kpiId, List.of(Alert.STATUS_UNACKNOWLEDGED, Alert.STATUS_ACKNOWLEDGED));
+
+        for (Alert alert : openAlerts) {
+            alert.setStatus(Alert.STATUS_RESOLVED);
+            alert.setResolvedAt(LocalDateTime.now());
+            alert.setResolutionReason(reason);
+        }
+        alertRepository.saveAll(openAlerts);
+
+        return openAlerts.stream()
+                .filter(alert -> alert.getRemarkedAt() != null)
+                .max(Comparator.comparing(Alert::getRemarkedAt))
+                .map(Alert::getAdminRemark)
+                .orElse(null);
+    }
+
     private KpiDefinitionResponse mapToResponse(KpiDefinition kpiDef) {
         KpiDefinitionResponse response = new KpiDefinitionResponse();
         response.setId(kpiDef.getId());
@@ -209,4 +258,4 @@ public class KpiDefinitionService {
 
         return response;
     }
-}
+}

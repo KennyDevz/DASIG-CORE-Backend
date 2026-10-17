@@ -16,6 +16,7 @@ public class Alert {
 
     public static final String STATUS_UNACKNOWLEDGED = "UNACKNOWLEDGED";
     public static final String STATUS_ACKNOWLEDGED = "ACKNOWLEDGED";
+    public static final String STATUS_RESOLVED = "RESOLVED";
 
     public static final String TYPE_OVERDUE = "OVERDUE";
     public static final String TYPE_AT_RISK = "AT_RISK";
@@ -30,6 +31,10 @@ public class Alert {
     @Column(name = "kpi_definition_id")
     private Long kpiDefinitionId;
 
+    /**
+     * Legacy link to the submission that triggered the alert.
+     * Alerts are now evaluated per KPI, so new alerts leave this null.
+     */
     @Column(name = "submission_id")
     private Long submissionId;
 
@@ -44,4 +49,33 @@ public class Alert {
     @CreationTimestamp
     @Column(name = "detected_at", nullable = false, updatable = false)
     private LocalDateTime detectedAt;
-}
+
+    /** When the alert was automatically resolved (target met, recovered, escalated, or deadline changed). */
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
+    /** Human-readable reason the alert was resolved, e.g. "Target met" or "Progress recovered". */
+    @Column(name = "resolution_reason", length = 255)
+    private String resolutionReason;
+
+    /** Remark recorded by the DASIG Admin when acknowledging the alert (max 500 characters). */
+    @Column(name = "admin_remark", length = 500)
+    private String adminRemark;
+
+    /** User ID of the Admin who acknowledged the alert. */
+    @Column(name = "remarked_by_id")
+    private Long remarkedById;
+
+    /** When the Admin acknowledged the alert with a remark. */
+    @Column(name = "remarked_at")
+    private LocalDateTime remarkedAt;
+
+    /** An alert is open until it is resolved (Unacknowledged or Acknowledged). */
+    public boolean isOpen() {
+        return !STATUS_RESOLVED.equals(status);
+    }
+
+    public boolean isResolved() {
+        return STATUS_RESOLVED.equals(status);
+    }
+}
