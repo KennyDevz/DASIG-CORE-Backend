@@ -357,7 +357,7 @@ public class DashboardService {
         double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
         double targetValue = progress != null ? progress.expectedTarget() : kpiDefinition.getTargetValue();
         double achievementRate = progress != null ? progress.achievementRate() : 0.0;
-        String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.RED;
+        String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.OVERDUE;
 
         DashboardKpiItemResponse item = new DashboardKpiItemResponse();
         item.setId(kpiDefinition.getId());
@@ -447,7 +447,7 @@ public class DashboardService {
 
                     double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
                     double achievementRate = progress != null ? progress.achievementRate() : 0.0;
-                    String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.RED;
+                    String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.OVERDUE;
 
                     DashboardOrganizationProgressResponse breakdown = new DashboardOrganizationProgressResponse();
                     breakdown.setOrganizationId(organization.getId());
@@ -493,22 +493,12 @@ public class DashboardService {
 
     /**
      * Maps backend performance status to the dashboard KPI status string.
-     *
-     * <p>Uses goal completion as the primary signal: if the overall target
-     * has been reached, the KPI is COMPLETED regardless of performanceStatus.
-     * Otherwise, delegates to the deadline-paced PerformanceStatusClassifier result.</p>
      */
     private String mapStatus(String performanceStatus, double cumulativeSubmittedValue, double overallTargetValue) {
         if (overallTargetValue > 0 && cumulativeSubmittedValue >= overallTargetValue) {
-            return "COMPLETED";
+            return PerformanceStatusClassifier.COMPLETED;
         }
-        if (PerformanceStatusClassifier.GREEN.equals(performanceStatus)) {
-            return "ON_TRACK";
-        }
-        if (PerformanceStatusClassifier.YELLOW.equals(performanceStatus)) {
-            return "AT_RISK";
-        }
-        return "DELAYED";
+        return performanceStatus;
     }
 
     private String resolveOrganizationName(User user) {

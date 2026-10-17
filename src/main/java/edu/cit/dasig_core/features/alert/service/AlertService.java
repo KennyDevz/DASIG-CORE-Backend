@@ -197,7 +197,7 @@ public class AlertService {
         } else {
             response.setReportingPeriod(alert.getAlertType() != null ? alert.getAlertType() : "OVERDUE");
             response.setPeriodContribution(0.0);
-            response.setPerformanceStatus(Alert.TYPE_OVERDUE.equals(alert.getAlertType()) ? "RED" : "YELLOW");
+            response.setPerformanceStatus(Alert.TYPE_OVERDUE.equals(alert.getAlertType()) ? "OVERDUE" : "AT_RISK");
         }
 
         return response;

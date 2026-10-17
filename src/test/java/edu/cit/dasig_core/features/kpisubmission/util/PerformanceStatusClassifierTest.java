@@ -9,66 +9,66 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PerformanceStatusClassifierTest {
 
     @Test
-    void classify_green_whenTargetFullyReachedEvenPastDeadline() {
+    void classify_completed_whenTargetFullyReachedEvenPastDeadline() {
         String status = PerformanceStatusClassifier.classify(100.0, 100.0, LocalDate.now().minusDays(1));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.GREEN);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.COMPLETED);
     }
 
     @Test
-    void classify_green_whenTargetExceeded() {
+    void classify_completed_whenTargetExceeded() {
         String status = PerformanceStatusClassifier.classify(150.0, 100.0, LocalDate.now().plusMonths(6));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.GREEN);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.COMPLETED);
     }
 
     @Test
-    void classify_red_whenDeadlinePassedAndTargetNotReached() {
+    void classify_overdue_whenDeadlinePassedAndTargetNotReached() {
         String status = PerformanceStatusClassifier.classify(50.0, 100.0, LocalDate.now().minusDays(1));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.RED);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.OVERDUE);
     }
 
     @Test
-    void classify_yellow_whenDeadlineSoonAndProgressBelowFiftyPercent() {
+    void classify_atRisk_whenDeadlineSoonAndProgressBelowFiftyPercent() {
         String status = PerformanceStatusClassifier.classify(20.0, 100.0, LocalDate.now().plusDays(30));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.YELLOW);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.AT_RISK);
     }
 
     @Test
-    void classify_green_whenDeadlineSoonButProgressAtLeastFiftyPercent() {
+    void classify_onTrack_whenDeadlineSoonButProgressAtLeastFiftyPercent() {
         String status = PerformanceStatusClassifier.classify(50.0, 100.0, LocalDate.now().plusDays(30));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.GREEN);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 
     @Test
-    void classify_green_whenDeadlineFarAwayRegardlessOfLowProgress() {
+    void classify_onTrack_whenDeadlineFarAwayRegardlessOfLowProgress() {
         String status = PerformanceStatusClassifier.classify(5.0, 100.0, LocalDate.now().plusDays(90));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.GREEN);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 
     @Test
     void classify_atExactSixtyDayBoundary_appliesAtRiskRule() {
         String status = PerformanceStatusClassifier.classify(10.0, 100.0, LocalDate.now().plusDays(60));
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.YELLOW);
+        assertThat(status).isEqualTo(PerformanceStatusClassifier.AT_RISK);
     }
 
     @Test
-    void classify_zeroTarget_neverReportsGreenFromGoalCompletion() {
+    void classify_zeroTarget_neverReportsCompletedFromGoalCompletion() {
         // A KPI with targetValue = 0 is a data-entry error (CreateKpiDefinitionRequest only
         // has @NotNull, not @Positive, so 0 is currently accepted). With this deadline-based
-        // model, a zero target no longer short-circuits to GREEN via goal completion (the
+        // model, a zero target no longer short-circuits to COMPLETED via goal completion (the
         // `targetValue > 0` guard blocks that) - it instead falls through to the deadline
         // rules below, which is more defensible than the old model but still somewhat
         // meaningless for a target that was never valid to begin with.
         String overdue = PerformanceStatusClassifier.classify(0.0, 0.0, LocalDate.now().minusDays(1));
         String upcoming = PerformanceStatusClassifier.classify(0.0, 0.0, LocalDate.now().plusDays(90));
 
-        assertThat(overdue).isEqualTo(PerformanceStatusClassifier.RED);
-        assertThat(upcoming).isEqualTo(PerformanceStatusClassifier.GREEN);
+        assertThat(overdue).isEqualTo(PerformanceStatusClassifier.OVERDUE);
+        assertThat(upcoming).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 }

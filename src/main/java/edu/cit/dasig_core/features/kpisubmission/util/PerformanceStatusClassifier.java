@@ -13,17 +13,18 @@ import java.time.temporal.ChronoUnit;
  *
  * <p>Rules (Option 1 - Goal and Deadline-Based):
  * <ul>
- *   <li>GREEN  - cumulativeValue &gt;= targetValue (goal fully reached)</li>
- *   <li>RED    - deadline has passed AND goal not reached (truly overdue)</li>
- *   <li>YELLOW - deadline is within AT_RISK_DAYS AND progress &lt; AT_RISK_RATIO of target</li>
- *   <li>GREEN  - otherwise (active, progressing, time remaining)</li>
+ *   <li>COMPLETED - cumulativeValue &gt;= targetValue (goal fully reached)</li>
+ *   <li>OVERDUE   - deadline has passed AND goal not reached</li>
+ *   <li>AT_RISK   - deadline is within AT_RISK_DAYS AND progress &lt; AT_RISK_RATIO of target</li>
+ *   <li>ON_TRACK  - otherwise (active, progressing, time remaining)</li>
  * </ul>
  */
 public final class PerformanceStatusClassifier {
 
-    public static final String GREEN  = "GREEN";
-    public static final String YELLOW = "YELLOW";
-    public static final String RED    = "RED";
+    public static final String COMPLETED = "COMPLETED";
+    public static final String ON_TRACK  = "ON_TRACK";
+    public static final String AT_RISK   = "AT_RISK";
+    public static final String OVERDUE   = "OVERDUE";
 
     /** Number of days before the deadline that triggers AT_RISK if progress is low. */
     private static final long   AT_RISK_DAYS  = 60L;
@@ -39,28 +40,28 @@ public final class PerformanceStatusClassifier {
      * @param cumulativeSubmittedValue total value submitted so far (across all periods)
      * @param targetValue              overall KPI target value
      * @param deadline                 KPI deadline date
-     * @return GREEN, YELLOW, or RED
+     * @return COMPLETED, ON_TRACK, AT_RISK, or OVERDUE
      */
     public static String classify(double cumulativeSubmittedValue, double targetValue, LocalDate deadline) {
-        // Goal fully reached -> always GREEN
+        // Goal fully reached -> always COMPLETED
         if (targetValue > 0 && cumulativeSubmittedValue >= targetValue) {
-            return GREEN;
+            return COMPLETED;
         }
 
         long daysUntilDeadline = ChronoUnit.DAYS.between(LocalDate.now(), deadline);
 
-        // Deadline passed, goal not reached -> RED (Overdue)
+        // Deadline passed, goal not reached -> OVERDUE
         if (daysUntilDeadline < 0) {
-            return RED;
+            return OVERDUE;
         }
 
-        // Deadline approaching and progress is significantly low -> YELLOW (At Risk)
+        // Deadline approaching and progress is significantly low -> AT_RISK
         double progressRatio = targetValue > 0 ? cumulativeSubmittedValue / targetValue : 0.0;
         if (daysUntilDeadline <= AT_RISK_DAYS && progressRatio < AT_RISK_RATIO) {
-            return YELLOW;
+            return AT_RISK;
         }
 
-        // Actively progressing with time remaining -> GREEN (On Track / In Progress)
-        return GREEN;
+        // Actively progressing with time remaining -> ON_TRACK
+        return ON_TRACK;
     }
 }
