@@ -11,7 +11,10 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "notifications",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"kpi_definition_id", "organization_id", "notification_type"})
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_notifications_kpi_org_dedupe",
+                columnNames = {"kpi_definition_id", "organization_id", "dedupe_key"}
+        )
 )
 @Getter
 @Setter
@@ -37,6 +40,18 @@ public class Notification {
 
     @Column(nullable = false)
     private String status;
+
+    /** The alert this notification is about (At Risk, Overdue, Alert Acknowledged); null for deadline reminders. */
+    @Column(name = "alert_id")
+    private Long alertId;
+
+    /**
+     * Prevents duplicate notifications per KPI and organization. Built per type, e.g.
+     * "SEVEN_DAYS_BEFORE:2026-05-01" (a new deadline allows new reminders) or "AT_RISK:alert-42".
+     * See {@link NotificationKeys}.
+     */
+    @Column(name = "dedupe_key", nullable = false, length = 120)
+    private String dedupeKey;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String message;

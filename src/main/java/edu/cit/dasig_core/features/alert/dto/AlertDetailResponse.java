@@ -32,4 +32,22 @@ public class AlertDetailResponse {
     private Double achievementRate;
     private String performanceStatus;
     private SubmissionType submissionType;
-}
+
+    // Pace: progress the KPI should have reached by today
+    private Double expectedByNow;
+
+    // Admin remark (set when acknowledged)
+    private String adminRemark;
+    private String remarkedByName;
+    private LocalDateTime remarkedAt;
+
+    // Automatic resolution
+    private LocalDateTime resolvedAt;
+    private String resolutionReason;
+
+    // Committee Lead's explanation (Overdue alerts only)
+    private String explanationStatus;
+    private String explanation;
+    private String explainedByName;
+    private LocalDateTime explainedAt;
+}

@@ -4,12 +4,15 @@ import edu.cit.dasig_core.features.alert.dto.AlertDetailResponse;
 import edu.cit.dasig_core.features.alert.dto.AlertResponse;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
+import edu.cit.dasig_core.features.alert.repository.OverdueExplanationRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
+import edu.cit.dasig_core.features.kpisubmission.util.KpiPaceCalculator;
+import edu.cit.dasig_core.features.notification.service.NotificationService;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -33,6 +37,8 @@ public class AlertService {
     private final KpiDefinitionRepository kpiDefinitionRepository;
     private final UserRepository userRepository;
     private final KpiAlertEvaluatorService kpiAlertEvaluatorService;
+    private final NotificationService notificationService;
+    private final OverdueExplanationRepository overdueExplanationRepository;
 
     @Value("${app.business-timezone:Asia/Manila}")
     private String businessTimezone;
@@ -58,59 +64,39 @@ public class AlertService {
         User user = resolveCurrentUser();
         validateAlertViewerRole(user);
 
-        Alert alert = alertRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Alert not found with ID: " + id));
-
-        KpiSubmission submission = alert.getSubmissionId() != null
-                ? kpiSubmissionRepository.findById(alert.getSubmissionId()).orElse(null)
-                : null;
-
-        KpiDefinition kpi = submission != null
-                ? submission.getKpiDefinition()
-                : kpiDefinitionRepository.findById(alert.getKpiDefinitionId())
-                        .orElseThrow(() -> new IllegalArgumentException("KPI not found for alert with ID: " + alert.getId()));
-
-        return toDetailResponse(alert, submission, kpi);
+        return toDetail(findAlert(id));
     }
 
+    /**
+     * Admin acknowledges an open alert with a short remark (UC-4.2).
+     * Resolved alerts cannot be acknowledged.
+     */
     @Transactional
-    public AlertDetailResponse acknowledgeAlert(Long id) {
-        User user = resolveCurrentUser();
-        validateAlertViewerRole(user);
+    public AlertDetailResponse acknowledgeAlert(Long id, String remark) {
+        User admin = resolveCurrentUser();
+        validateAlertViewerRole(admin);
 
-        Alert alert = alertRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Alert not found with ID: " + id));
-
-        KpiSubmission submission = alert.getSubmissionId() != null
-                ? kpiSubmissionRepository.findById(alert.getSubmissionId()).orElse(null)
-                : null;
-
-        KpiDefinition kpi = submission != null
-                ? submission.getKpiDefinition()
-                : kpiDefinitionRepository.findById(alert.getKpiDefinitionId())
-                        .orElseThrow(() -> new IllegalArgumentException("KPI not found for alert with ID: " + alert.getId()));
-
+        Alert alert = findAlert(id);
+        if (alert.isResolved()) {
+            throw new IllegalArgumentException("Resolved alerts cannot be acknowledged.");
+        }
         if (Alert.STATUS_ACKNOWLEDGED.equals(alert.getStatus())) {
             throw new IllegalArgumentException("Alert is already acknowledged.");
         }
 
         alert.setStatus(Alert.STATUS_ACKNOWLEDGED);
-        Alert savedAlert = alertRepository.save(alert);
+        alert.setAdminRemark(remark.trim());
+        alert.setRemarkedById(admin.getId());
+        alert.setRemarkedAt(LocalDateTime.now(ZoneId.of(businessTimezone)));
 
-        // Clean up any lingering duplicate alerts for this KPI and alert type
-        if (savedAlert.getKpiDefinitionId() != null && savedAlert.getAlertType() != null) {
-            List<Alert> duplicates = alertRepository.findByKpiDefinitionIdAndAlertType(
-                    savedAlert.getKpiDefinitionId(), savedAlert.getAlertType()
-            ).stream()
-            .filter(a -> !a.getId().equals(savedAlert.getId()))
-            .toList();
+        Alert saved = alertRepository.save(alert);
+        AlertDetailResponse response = toDetail(saved);
 
-            if (!duplicates.isEmpty()) {
-                alertRepository.deleteAll(duplicates);
-            }
-        }
+        // Let the committee's organizations see the Admin's remark (UC-4.3)
+        kpiDefinitionRepository.findById(response.getKpiDefinitionId())
+                .ifPresent(kpi -> notificationService.notifyAlertAcknowledged(kpi, saved));
 
-        return toDetailResponse(savedAlert, submission, kpi);
+        return response;
     }
 
     public boolean existsForSubmission(Long submissionId) {
@@ -140,6 +126,35 @@ public class AlertService {
         return user;
     }
 
+    private Alert findAlert(Long id) {
+        return alertRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Alert not found with ID: " + id));
+    }
+
+    private AlertDetailResponse toDetail(Alert alert) {
+        // submissionId is only set on legacy alerts; new alerts are KPI-level
+        KpiSubmission submission = alert.getSubmissionId() != null
+                ? kpiSubmissionRepository.findById(alert.getSubmissionId()).orElse(null)
+                : null;
+
+        KpiDefinition kpi = submission != null
+                ? submission.getKpiDefinition()
+                : kpiDefinitionRepository.findById(alert.getKpiDefinitionId())
+                        .orElseThrow(() -> new IllegalArgumentException("KPI not found for alert with ID: " + alert.getId()));
+
+        return toDetailResponse(alert, submission, kpi);
+    }
+
+    /** "Awaiting explanation" or "Explained" for Overdue alerts; null for At Risk alerts. */
+    private String explanationStatus(Alert alert) {
+        if (!Alert.TYPE_OVERDUE.equals(alert.getAlertType())) {
+            return null;
+        }
+        return overdueExplanationRepository.existsByAlertId(alert.getId())
+                ? OverdueExplanationService.STATUS_EXPLAINED
+                : OverdueExplanationService.STATUS_AWAITING;
+    }
+
     private AlertResponse toResponse(Alert alert) {
         AlertResponse response = new AlertResponse();
         response.setId(alert.getId());
@@ -149,6 +164,9 @@ public class AlertService {
         response.setSeverity(alert.getSeverity());
         response.setStatus(alert.getStatus());
         response.setDetectedAt(alert.getDetectedAt());
+        response.setResolvedAt(alert.getResolvedAt());
+        response.setResolutionReason(alert.getResolutionReason());
+        response.setExplanationStatus(explanationStatus(alert));
         return response;
     }
 
@@ -188,6 +206,28 @@ public class AlertService {
         response.setScaledPeriodTarget(target);
         response.setAchievementRate(achievementRate);
 
+        LocalDate startDate = kpi.getDateCreated() != null ? kpi.getDateCreated().toLocalDate() : null;
+        response.setExpectedByNow(KpiPaceCalculator.expectedByNow(target, startDate, kpi.getDeadline(), today()));
+
+        // Lifecycle: Admin remark and automatic resolution
+        response.setAdminRemark(alert.getAdminRemark());
+        response.setRemarkedAt(alert.getRemarkedAt());
+        if (alert.getRemarkedById() != null) {
+            userRepository.findById(alert.getRemarkedById())
+                    .ifPresent(admin -> response.setRemarkedByName(admin.getName()));
+        }
+        response.setResolvedAt(alert.getResolvedAt());
+        response.setResolutionReason(alert.getResolutionReason());
+
+        // Committee Lead's explanation (Overdue alerts only, UC-4.4)
+        response.setExplanationStatus(explanationStatus(alert));
+        overdueExplanationRepository.findByAlertId(alert.getId()).ifPresent(explanation -> {
+            response.setExplanation(explanation.getExplanation());
+            response.setExplainedAt(explanation.getCreatedAt());
+            userRepository.findById(explanation.getAuthorId())
+                    .ifPresent(author -> response.setExplainedByName(author.getName()));
+        });
+
         if (submission != null) {
             response.setReportingPeriod(submission.getReportingPeriod());
             response.setPeriodContribution(submission.getSubmittedValue());
@@ -202,4 +242,4 @@ public class AlertService {
 
         return response;
     }
-}
+}

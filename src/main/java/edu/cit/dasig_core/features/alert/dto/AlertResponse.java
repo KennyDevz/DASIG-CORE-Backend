@@ -13,4 +13,7 @@ public class AlertResponse {
     private String severity;
     private String status;
     private LocalDateTime detectedAt;
-}
+    private LocalDateTime resolvedAt;
+    private String resolutionReason;
+    private String explanationStatus;
+}

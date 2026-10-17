@@ -8,7 +8,9 @@ import edu.cit.dasig_core.features.kpi.dto.UpdateKpiDefinitionRequest;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.model.ReportingFrequency;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
+import edu.cit.dasig_core.features.alert.repository.OverdueExplanationRepository;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
@@ -21,16 +23,23 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class KpiDefinitionServiceTest {
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH);
 
     @Mock
     private KpiDefinitionRepository kpiDefinitionRepository;
@@ -46,6 +55,8 @@ class KpiDefinitionServiceTest {
     private KpiSubmissionRepository kpiSubmissionRepository;
     @Mock
     private SubmissionDocumentRepository submissionDocumentRepository;
+    @Mock
+    private OverdueExplanationRepository overdueExplanationRepository;
 
     private KpiDefinitionService kpiDefinitionService;
 
@@ -58,7 +69,8 @@ class KpiDefinitionServiceTest {
                 notificationRepository,
                 alertRepository,
                 kpiSubmissionRepository,
-                submissionDocumentRepository
+                submissionDocumentRepository,
+                overdueExplanationRepository
         );
     }
 
@@ -190,6 +202,7 @@ class KpiDefinitionServiceTest {
         kpiDefinitionService.deleteKpiDefinition(1L);
 
         verify(notificationRepository).deleteByKpiDefinitionId(1L);
+        verify(overdueExplanationRepository).deleteByKpiDefinitionId(1L);
         verify(alertRepository).deleteByKpiDefinitionId(1L);
         verify(alertRepository).deleteBySubmissionId(10L);
         verify(submissionDocumentRepository).deleteBySubmissionId(10L);
@@ -259,7 +272,7 @@ class KpiDefinitionServiceTest {
         existingKpi.setDescription("Old Desc");
         existingKpi.setTargetValue(50.0);
         existingKpi.setUnit("units");
-        existingKpi.setDeadline(LocalDate.of(2026, 9, 15));
+        existingKpi.setDeadline(LocalDate.now().plusMonths(1));
         existingKpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
 
         UpdateKpiDefinitionRequest request = new UpdateKpiDefinitionRequest();
@@ -267,13 +280,14 @@ class KpiDefinitionServiceTest {
         request.setDescription("Updated Desc");
         request.setTargetValue(50.0);
         request.setUnit("units");
-        request.setDeadline(LocalDate.of(2026, 10, 31));
+        LocalDate newDeadline = LocalDate.now().plusMonths(2);
+        request.setDeadline(newDeadline);
         request.setThreshold(100.0);
         request.setReportingFrequency(ReportingFrequency.ONE_TIME);
 
         KpiSubmission submission = new KpiSubmission();
         submission.setId(1L);
-        submission.setReportingPeriod("Due by Sep 15, 2026");
+        submission.setReportingPeriod("Due by " + existingKpi.getDeadline().format(DATE_FORMAT));
         submission.setSubmittedValue(25.0);
 
         when(kpiDefinitionRepository.findById(10L)).thenReturn(Optional.of(existingKpi));
@@ -282,8 +296,77 @@ class KpiDefinitionServiceTest {
 
         KpiDefinitionResponse response = kpiDefinitionService.updateKpiDefinition(10L, request);
 
-        assertThat(response.getDeadline()).isEqualTo(LocalDate.of(2026, 10, 31));
-        assertThat(submission.getReportingPeriod()).isEqualTo("Due by Oct 31, 2026");
+        assertThat(response.getDeadline()).isEqualTo(newDeadline);
+        assertThat(submission.getReportingPeriod()).isEqualTo("Due by " + newDeadline.format(DATE_FORMAT));
         verify(kpiSubmissionRepository).save(submission);
+    }
+
+    // ---- Deadline change (UC-2.2) ----
+
+    @Test
+    void updateKpiDefinition_resolvesOpenAlerts_whenDeadlineChanged() {
+        KpiDefinition existingKpi = simpleKpi(LocalDate.now().minusDays(1));
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(existingKpi));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(i -> i.getArgument(0));
+
+        Alert overdue = new Alert();
+        overdue.setAlertType(Alert.TYPE_OVERDUE);
+        overdue.setStatus(Alert.STATUS_ACKNOWLEDGED);
+        overdue.setAdminRemark("Extending after talking to the committee.");
+        overdue.setRemarkedAt(LocalDateTime.now());
+        when(alertRepository.findByKpiDefinitionIdAndStatusIn(eq(1L), anyCollection())).thenReturn(List.of(overdue));
+
+        LocalDate newDeadline = LocalDate.now().plusMonths(1);
+        kpiDefinitionService.updateKpiDefinition(1L, updateRequest(newDeadline));
+
+        assertThat(overdue.getStatus()).isEqualTo(Alert.STATUS_RESOLVED);
+        assertThat(overdue.getResolutionReason()).isEqualTo("Deadline changed to " + newDeadline.format(DATE_FORMAT));
+        assertThat(overdue.getResolvedAt()).isNotNull();
+        verify(alertRepository).saveAll(List.of(overdue));
+        verify(notificationService).notifyDeadlineUpdated(existingKpi, LocalDate.now().minusDays(1), newDeadline,
+                "Extending after talking to the committee.");
+    }
+
+    @Test
+    void updateKpiDefinition_keepsAlerts_whenDeadlineUnchanged() {
+        LocalDate deadline = LocalDate.now().plusMonths(1);
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(simpleKpi(deadline)));
+        when(kpiDefinitionRepository.saveAndFlush(any(KpiDefinition.class))).thenAnswer(i -> i.getArgument(0));
+
+        kpiDefinitionService.updateKpiDefinition(1L, updateRequest(deadline));
+
+        verify(alertRepository, never()).findByKpiDefinitionIdAndStatusIn(any(), any());
+        verify(notificationService, never()).notifyDeadlineUpdated(any(), any(), any(), any());
+    }
+
+    @Test
+    void updateKpiDefinition_throws_whenNewDeadlineIsInThePast() {
+        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(simpleKpi(LocalDate.now().plusMonths(1))));
+
+        assertThatThrownBy(() -> kpiDefinitionService.updateKpiDefinition(1L, updateRequest(LocalDate.now().minusDays(1))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("New deadline cannot be in the past.");
+        verify(kpiDefinitionRepository, never()).saveAndFlush(any());
+    }
+
+    private KpiDefinition simpleKpi(LocalDate deadline) {
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(1L);
+        kpi.setName("KPI");
+        kpi.setTargetValue(100.0);
+        kpi.setDeadline(deadline);
+        kpi.setReportingFrequency(ReportingFrequency.QUARTERLY);
+        return kpi;
+    }
+
+    private UpdateKpiDefinitionRequest updateRequest(LocalDate deadline) {
+        UpdateKpiDefinitionRequest request = new UpdateKpiDefinitionRequest();
+        request.setName("KPI");
+        request.setDescription("desc");
+        request.setTargetValue(100.0);
+        request.setUnit("units");
+        request.setDeadline(deadline);
+        request.setReportingFrequency(ReportingFrequency.QUARTERLY);
+        return request;
     }
 }
