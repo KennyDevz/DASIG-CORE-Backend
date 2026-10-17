@@ -97,7 +97,7 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
                     newUser.setOrganizationId(org.isPresent() ? org.get().getId() : 2L);
                 }
 
-                newUser.setStatus("ACTIVE");
+                newUser.setStatus("Active");
                 newUser.setMustChangePassword(false);
                 newUser.setPasswordHash("");
                 
