@@ -14,6 +14,8 @@ public class KpiPeriodHistoryResponse {
     private Double targetValue;
     private String unit;
     private LocalDate deadline;
+    /** KPI creation date: start of the timeline used for the expected-pace line. */
+    private LocalDate startDate;
     private ReportingFrequency reportingFrequency;
     private String currentPeriod;
     private String organization;

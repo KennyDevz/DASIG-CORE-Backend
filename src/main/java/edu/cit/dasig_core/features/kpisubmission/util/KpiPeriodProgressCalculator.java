@@ -13,8 +13,8 @@ import java.util.List;
  *
  * <p>For ONE_TIME KPIs (Submit Anytime workflow), there is exactly one reporting
  * period. Progress is cumulative across all submissions, compared against the
- * overall target value. Status is determined by deadline proximity and goal
- * completion rather than periodic thresholds.</p>
+ * overall target value. Status is determined by goal completion, deadline and
+ * pace (see {@link PerformanceStatusClassifier}) rather than periodic thresholds.</p>
  */
 public final class KpiPeriodProgressCalculator {
 
@@ -26,6 +26,17 @@ public final class KpiPeriodProgressCalculator {
             String reportingPeriod,
             List<KpiSubmission> submissions,
             double currentSubmittedValue
+    ) {
+        return calculate(kpiDefinition, reportingPeriod, submissions, currentSubmittedValue, PerformanceStatusClassifier.today());
+    }
+
+    /** Same as above, evaluated on {@code today} (tests pass a fixed date). */
+    public static KpiPeriodProgress calculate(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            List<KpiSubmission> submissions,
+            double currentSubmittedValue,
+            LocalDate today
     ) {
         LocalDate assignmentStart = resolveAssignmentStart(kpiDefinition);
         List<String> periods = ReportingPeriodResolver.generatePeriodOptions(
@@ -63,11 +74,16 @@ public final class KpiPeriodProgressCalculator {
 
         double achievementRate = KpiAchievementCalculator.calculate(cumulativeSubmittedValue, expectedTarget);
 
-        // Use deadline-paced classification against overall target
+        // Pace-based classification against the overall target (same rule as KPI alerts)
+        LocalDate startDate = kpiDefinition.getDateCreated() != null
+                ? kpiDefinition.getDateCreated().toLocalDate()
+                : null;
         String performanceStatus = PerformanceStatusClassifier.classify(
                 cumulativeSubmittedValue,
                 kpiDefinition.getTargetValue(),
-                kpiDefinition.getDeadline()
+                startDate,
+                kpiDefinition.getDeadline(),
+                today
         );
 
         return new KpiPeriodProgress(
@@ -85,12 +101,21 @@ public final class KpiPeriodProgressCalculator {
             String reportingPeriod,
             List<KpiSubmission> submissions
     ) {
+        return calculateExisting(kpiDefinition, reportingPeriod, submissions, PerformanceStatusClassifier.today());
+    }
+
+    public static KpiPeriodProgress calculateExisting(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            List<KpiSubmission> submissions,
+            LocalDate today
+    ) {
         double currentSubmittedValue = submissions.stream()
                 .filter(submission -> isSubmissionInPeriod(kpiDefinition, reportingPeriod, submission))
                 .mapToDouble(KpiSubmission::getSubmittedValue)
                 .sum();
 
-        return calculate(kpiDefinition, reportingPeriod, submissions, currentSubmittedValue);
+        return calculate(kpiDefinition, reportingPeriod, submissions, currentSubmittedValue, today);
     }
 
     public static KpiPeriodProgress calculateWithNewSubmission(
@@ -98,6 +123,17 @@ public final class KpiPeriodProgressCalculator {
             String reportingPeriod,
             List<KpiSubmission> existingSubmissions,
             double newSubmittedValue
+    ) {
+        return calculateWithNewSubmission(kpiDefinition, reportingPeriod, existingSubmissions, newSubmittedValue,
+                PerformanceStatusClassifier.today());
+    }
+
+    public static KpiPeriodProgress calculateWithNewSubmission(
+            KpiDefinition kpiDefinition,
+            String reportingPeriod,
+            List<KpiSubmission> existingSubmissions,
+            double newSubmittedValue,
+            LocalDate today
     ) {
         double existingCurrentPeriodValue = existingSubmissions.stream()
                 .filter(submission -> isSubmissionInPeriod(kpiDefinition, reportingPeriod, submission))
@@ -108,7 +144,8 @@ public final class KpiPeriodProgressCalculator {
                 kpiDefinition,
                 reportingPeriod,
                 existingSubmissions,
-                existingCurrentPeriodValue + newSubmittedValue
+                existingCurrentPeriodValue + newSubmittedValue,
+                today
         );
     }
 

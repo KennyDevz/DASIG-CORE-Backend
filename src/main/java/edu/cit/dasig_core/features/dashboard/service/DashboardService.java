@@ -135,6 +135,7 @@ public class DashboardService {
         response.setTargetValue(kpiDefinition.getTargetValue());
         response.setUnit(kpiDefinition.getUnit());
         response.setDeadline(kpiDefinition.getDeadline());
+        response.setStartDate(kpiDefinition.getDateCreated() != null ? kpiDefinition.getDateCreated().toLocalDate() : null);
         response.setReportingFrequency(kpiDefinition.getReportingFrequency());
         response.setCurrentPeriod(currentPeriod);
         response.setOrganization(kpiDefinition.getCommittee() != null ? kpiDefinition.getCommittee().getName() : null);
@@ -357,7 +358,7 @@ public class DashboardService {
         double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
         double targetValue = progress != null ? progress.expectedTarget() : kpiDefinition.getTargetValue();
         double achievementRate = progress != null ? progress.achievementRate() : 0.0;
-        String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.OVERDUE;
+        String performanceStatus = progress != null ? progress.performanceStatus() : classifyWithoutPeriod(kpiDefinition);
 
         DashboardKpiItemResponse item = new DashboardKpiItemResponse();
         item.setId(kpiDefinition.getId());
@@ -447,7 +448,7 @@ public class DashboardService {
 
                     double submittedValue = progress != null ? progress.cumulativeSubmittedValue() : 0.0;
                     double achievementRate = progress != null ? progress.achievementRate() : 0.0;
-                    String performanceStatus = progress != null ? progress.performanceStatus() : PerformanceStatusClassifier.OVERDUE;
+                    String performanceStatus = progress != null ? progress.performanceStatus() : classifyWithoutPeriod(kpiDefinition);
 
                     DashboardOrganizationProgressResponse breakdown = new DashboardOrganizationProgressResponse();
                     breakdown.setOrganizationId(organization.getId());
@@ -504,6 +505,15 @@ public class DashboardService {
         return SubmissionType.INTERNAL;
     }
 
+    /** Status when no reporting period applies (e.g. invalid dates): nothing counted yet. */
+    private String classifyWithoutPeriod(KpiDefinition kpiDefinition) {
+        LocalDate startDate = kpiDefinition.getDateCreated() != null
+                ? kpiDefinition.getDateCreated().toLocalDate()
+                : null;
+        double target = kpiDefinition.getTargetValue() != null ? kpiDefinition.getTargetValue() : 0.0;
+        return PerformanceStatusClassifier.classify(0.0, target, startDate, kpiDefinition.getDeadline());
+    }
+
     /**
      * Maps backend performance status to the dashboard KPI status string.
      */
@@ -551,4 +561,4 @@ public class DashboardService {
 
         return user;
     }
-}
+}

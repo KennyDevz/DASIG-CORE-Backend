@@ -8,67 +8,44 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PerformanceStatusClassifierTest {
 
-    @Test
-    void classify_completed_whenTargetFullyReachedEvenPastDeadline() {
-        String status = PerformanceStatusClassifier.classify(100.0, 100.0, LocalDate.now().minusDays(1));
+    // 120-day KPI: Jan 1 -> May 1, 2026, target 100
+    private static final LocalDate START = LocalDate.of(2026, 1, 1);
+    private static final LocalDate DEADLINE = LocalDate.of(2026, 5, 1);
+    private static final LocalDate MONTH_2 = LocalDate.of(2026, 3, 2); // 50% passed, expects 50
 
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.COMPLETED);
+    @Test
+    void completed_whenTargetReached_evenAfterDeadline() {
+        assertThat(PerformanceStatusClassifier.classify(100, 100, START, DEADLINE, DEADLINE.plusDays(1)))
+                .isEqualTo(PerformanceStatusClassifier.COMPLETED);
     }
 
     @Test
-    void classify_completed_whenTargetExceeded() {
-        String status = PerformanceStatusClassifier.classify(150.0, 100.0, LocalDate.now().plusMonths(6));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.COMPLETED);
+    void overdue_whenDeadlinePassedAndTargetNotReached() {
+        assertThat(PerformanceStatusClassifier.classify(50, 100, START, DEADLINE, DEADLINE.plusDays(1)))
+                .isEqualTo(PerformanceStatusClassifier.OVERDUE);
     }
 
     @Test
-    void classify_overdue_whenDeadlinePassedAndTargetNotReached() {
-        String status = PerformanceStatusClassifier.classify(50.0, 100.0, LocalDate.now().minusDays(1));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.OVERDUE);
+    void atRisk_whenBelowHalfOfExpectedPace() {
+        assertThat(PerformanceStatusClassifier.classify(24, 100, START, DEADLINE, MONTH_2))
+                .isEqualTo(PerformanceStatusClassifier.AT_RISK);
     }
 
     @Test
-    void classify_atRisk_whenDeadlineSoonAndProgressBelowFiftyPercent() {
-        String status = PerformanceStatusClassifier.classify(20.0, 100.0, LocalDate.now().plusDays(30));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.AT_RISK);
+    void onTrack_whenAtOrAboveHalfOfExpectedPace() {
+        assertThat(PerformanceStatusClassifier.classify(25, 100, START, DEADLINE, MONTH_2))
+                .isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 
     @Test
-    void classify_onTrack_whenDeadlineSoonButProgressAtLeastFiftyPercent() {
-        String status = PerformanceStatusClassifier.classify(50.0, 100.0, LocalDate.now().plusDays(30));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
+    void onTrack_earlyInTimeline_evenWithNoProgress() {
+        assertThat(PerformanceStatusClassifier.classify(0, 100, START, DEADLINE, START.plusDays(20)))
+                .isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 
     @Test
-    void classify_onTrack_whenDeadlineFarAwayRegardlessOfLowProgress() {
-        String status = PerformanceStatusClassifier.classify(5.0, 100.0, LocalDate.now().plusDays(90));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
-    }
-
-    @Test
-    void classify_atExactSixtyDayBoundary_appliesAtRiskRule() {
-        String status = PerformanceStatusClassifier.classify(10.0, 100.0, LocalDate.now().plusDays(60));
-
-        assertThat(status).isEqualTo(PerformanceStatusClassifier.AT_RISK);
-    }
-
-    @Test
-    void classify_zeroTarget_neverReportsCompletedFromGoalCompletion() {
-        // A KPI with targetValue = 0 is a data-entry error (CreateKpiDefinitionRequest only
-        // has @NotNull, not @Positive, so 0 is currently accepted). With this deadline-based
-        // model, a zero target no longer short-circuits to COMPLETED via goal completion (the
-        // `targetValue > 0` guard blocks that) - it instead falls through to the deadline
-        // rules below, which is more defensible than the old model but still somewhat
-        // meaningless for a target that was never valid to begin with.
-        String overdue = PerformanceStatusClassifier.classify(0.0, 0.0, LocalDate.now().minusDays(1));
-        String upcoming = PerformanceStatusClassifier.classify(0.0, 0.0, LocalDate.now().plusDays(90));
-
-        assertThat(overdue).isEqualTo(PerformanceStatusClassifier.OVERDUE);
-        assertThat(upcoming).isEqualTo(PerformanceStatusClassifier.ON_TRACK);
+    void onTrack_whenCreationDateMissing() {
+        assertThat(PerformanceStatusClassifier.classify(0, 100, null, DEADLINE, MONTH_2))
+                .isEqualTo(PerformanceStatusClassifier.ON_TRACK);
     }
 }

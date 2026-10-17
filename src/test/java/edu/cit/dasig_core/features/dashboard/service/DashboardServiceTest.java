@@ -346,5 +346,6 @@ class DashboardServiceTest {
         assertThat(history.getPeriods()).hasSize(1);
         assertThat(history.getPeriods().get(0).getSubmissions()).hasSize(1);
         assertThat(history.getPeriods().get(0).getSubmissions().get(0).getSubmittedValue()).isEqualTo(50.0);
+        assertThat(history.getStartDate()).isEqualTo(oneTimeKpi.getDateCreated().toLocalDate());
     }
 }
