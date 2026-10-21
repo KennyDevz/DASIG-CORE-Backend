@@ -105,6 +105,14 @@ public class CommitteeService {
         committeeRepository.save(committee);
     }
 
+    @Transactional
+    public void activateCommittee(Long id) {
+        Committee committee = committeeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Committee not found with ID: " + id));
+        committee.setStatus("Active");
+        committeeRepository.save(committee);
+    }
+
     private CommitteeResponse mapToResponse(Committee committee) {
         CommitteeResponse response = new CommitteeResponse();
         response.setId(committee.getId());

@@ -54,4 +54,10 @@ public class OrganizationController {
         organizationService.deactivateOrganization(id);
         return ResponseEntity.noContent().build(); // 204 No Content
     }
+
+    @PatchMapping("/{id}/activate")
+    public ResponseEntity<Void> activateOrganization(@PathVariable Long id) {
+        organizationService.activateOrganization(id);
+        return ResponseEntity.noContent().build(); // 204 No Content
+    }
 }
