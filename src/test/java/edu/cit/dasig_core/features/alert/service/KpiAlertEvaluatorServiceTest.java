@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.core.smtp.EmailService;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
@@ -9,6 +10,7 @@ import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
+import edu.cit.dasig_core.features.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,11 +20,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -41,6 +45,10 @@ class KpiAlertEvaluatorServiceTest {
     private AlertRepository alertRepository;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private EmailService emailService;
+    @Mock
+    private UserRepository userRepository;
 
     private KpiAlertEvaluatorService evaluatorService;
 
@@ -52,7 +60,8 @@ class KpiAlertEvaluatorServiceTest {
     @BeforeEach
     void setUp() {
         evaluatorService = new KpiAlertEvaluatorService(
-                kpiDefinitionRepository, kpiSubmissionRepository, alertRepository, notificationService);
+                kpiDefinitionRepository, kpiSubmissionRepository, alertRepository,
+                notificationService, emailService, userRepository);
         ReflectionTestUtils.setField(evaluatorService, "businessTimezone", "Asia/Manila");
     }
 
@@ -69,6 +78,7 @@ class KpiAlertEvaluatorServiceTest {
     void createsAtRiskAlert_whenBehindPace() {
         givenKpi(CREATED, DEADLINE, 20.0); // 20 < half of 50
         givenOpenAlerts();
+        when(userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active")).thenReturn(Collections.emptyList());
 
         evaluatorService.evaluateAllKpiAlerts();
 
@@ -113,6 +123,7 @@ class KpiAlertEvaluatorServiceTest {
     void createsOverdueAlert_whenDeadlinePassedWithoutMeetingTarget() {
         givenKpi(CREATED, TODAY.minusDays(1), 50.0);
         givenOpenAlerts();
+        when(userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active")).thenReturn(Collections.emptyList());
 
         evaluatorService.evaluateAllKpiAlerts();
 
@@ -126,6 +137,7 @@ class KpiAlertEvaluatorServiceTest {
         givenKpi(CREATED, TODAY.minusDays(1), 50.0);
         Alert atRisk = openAlert(Alert.TYPE_AT_RISK);
         givenOpenAlerts(atRisk);
+        when(userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active")).thenReturn(Collections.emptyList());
 
         evaluatorService.evaluateAllKpiAlerts();
 
