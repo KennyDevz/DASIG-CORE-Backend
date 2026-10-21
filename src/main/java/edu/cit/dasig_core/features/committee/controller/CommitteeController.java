@@ -54,4 +54,10 @@ public class CommitteeController {
         committeeService.deactivateCommittee(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}/activate")
+    public ResponseEntity<Void> activateCommittee(@PathVariable Long id) {
+        committeeService.activateCommittee(id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -81,6 +81,15 @@ public class OrganizationService {
         organizationRepository.save(org);
     }
 
+    @Transactional
+    public void activateOrganization(Long id) {
+        Organization org = organizationRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Organization not found with ID: " + id));
+
+        org.setStatus("Active");
+        organizationRepository.save(org);
+    }
+
     private OrganizationResponse mapToResponse(Organization org) {
         OrganizationResponse response = new OrganizationResponse();
         response.setId(org.getId());
