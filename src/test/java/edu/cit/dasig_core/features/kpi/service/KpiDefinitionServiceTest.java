@@ -99,7 +99,7 @@ class KpiDefinitionServiceTest {
     }
 
     @Test
-    void createKpiDefinition_savesAndTriggersDeadlineNotificationsOnSuccess() {
+    void createKpiDefinition_savesOnSuccess() {
         Committee committee = new Committee();
         committee.setId(1L);
         committee.setName("Tech Committee");
@@ -114,7 +114,6 @@ class KpiDefinitionServiceTest {
 
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getCommitteeId()).isEqualTo(1L);
-        verify(notificationService).createDeadlineNotificationsForKpi(any(KpiDefinition.class));
     }
 
     @Test
@@ -134,7 +133,7 @@ class KpiDefinitionServiceTest {
     }
 
     @Test
-    void updateKpiDefinition_updatesAndTriggersDeadlineNotificationsOnSuccess() {
+    void updateKpiDefinition_updatesOnSuccess() {
         Committee committee = new Committee();
         committee.setId(1L);
         committee.setName("Tech Committee");
@@ -177,7 +176,6 @@ class KpiDefinitionServiceTest {
         assertThat(response.getCommitteeName()).isEqualTo("Tech Committee");
 
         verify(kpiDefinitionRepository).saveAndFlush(existingKpi);
-        verify(notificationService).createDeadlineNotificationsForKpi(existingKpi);
     }
 
 
@@ -227,7 +225,7 @@ class KpiDefinitionServiceTest {
     }
 
     @Test
-    void unarchiveKpiDefinition_restoresActiveAndReEvaluatesNotifications() {
+    void unarchiveKpiDefinition_restoresActive() {
         KpiDefinition kpi = new KpiDefinition();
         kpi.setId(1L);
         kpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
@@ -238,7 +236,6 @@ class KpiDefinitionServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(KpiDefinition.STATUS_ACTIVE);
         assertThat(response.isArchived()).isFalse();
-        verify(notificationService).createDeadlineNotificationsForKpi(any(KpiDefinition.class));
     }
 
     @Test

@@ -78,7 +78,6 @@ public class KpiDefinitionService {
         kpiDef.setCommittee(committee);
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
-        notificationService.createDeadlineNotificationsForKpi(savedKpiDef);
         return mapToResponse(savedKpiDef);
     }
 
@@ -127,8 +126,6 @@ public class KpiDefinitionService {
             notificationService.notifyDeadlineUpdated(updatedKpiDef, oldDeadline, updatedKpiDef.getDeadline(), latestRemark);
         }
 
-        // Creates reminders for the new deadline (old ones stay as history)
-        notificationService.createDeadlineNotificationsForKpi(updatedKpiDef);
         return mapToResponse(updatedKpiDef);
     }
 
@@ -154,9 +151,6 @@ public class KpiDefinitionService {
 
         kpiDef.setStatus(KpiDefinition.STATUS_ACTIVE);
         KpiDefinition saved = kpiDefinitionRepository.saveAndFlush(kpiDef);
-
-        // Re-evaluate deadline notifications
-        notificationService.createDeadlineNotificationsForKpi(saved);
 
         return mapToResponse(saved);
     }
@@ -258,4 +252,4 @@ public class KpiDefinitionService {
 
         return response;
     }
-}
+}

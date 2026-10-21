@@ -23,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -106,43 +105,6 @@ public class NotificationService {
         Notification saved = notificationRepository.save(notification);
         KpiDefinition kpiDefinition = loadKpiDefinition(saved.getKpiDefinitionId());
         return toDetailResponse(saved, kpiDefinition);
-    }
-
-    @Transactional
-    public void createDeadlineNotificationsForKpi(KpiDefinition kpi) {
-        if (kpi == null || kpi.getId() == null || kpi.getDeadline() == null) {
-            return;
-        }
-
-        long daysUntil = ChronoUnit.DAYS.between(today(), kpi.getDeadline());
-        if (daysUntil == 7) {
-            createNotificationIfAbsent(kpi, NotificationType.SEVEN_DAYS_BEFORE);
-        } else if (daysUntil == 2) {
-            createNotificationIfAbsent(kpi, NotificationType.TWO_DAYS_BEFORE);
-        }
-    }
-
-    @Transactional
-    public void createDeadlineNotificationsIfDue() {
-        LocalDate today = today();
-        List<KpiDefinition> kpis = kpiDefinitionRepository.findAll();
-
-        for (KpiDefinition kpi : kpis) {
-            if (kpi.getDeadline() == null) {
-                continue;
-            }
-
-            long daysUntil = ChronoUnit.DAYS.between(today, kpi.getDeadline());
-            if (daysUntil == 7) {
-                createNotificationIfAbsent(kpi, NotificationType.SEVEN_DAYS_BEFORE);
-            } else if (daysUntil == 2) {
-                createNotificationIfAbsent(kpi, NotificationType.TWO_DAYS_BEFORE);
-            }
-        }
-    }
-
-    private void createNotificationIfAbsent(KpiDefinition kpi, NotificationType type) {
-        sendToCommittee(kpi, type, NotificationKeys.deadlineReminder(type, kpi.getDeadline()), null, buildMessage(kpi, type));
     }
 
     // ---- Alert notifications (UC-4.3) ----
@@ -228,20 +190,6 @@ public class NotificationService {
         return date != null ? date.format(DATE_FORMAT) : "-";
     }
 
-    private String buildMessage(KpiDefinition kpi, NotificationType type) {
-        if (!type.isDeadlineReminder()) {
-            throw new IllegalArgumentException("Not a deadline reminder type: " + type);
-        }
-        int days = type.getDaysBeforeDeadline();
-        return String.format(
-                "Deadline alert: KPI \"%s\" is due in %d day%s on %s.",
-                kpi.getName(),
-                days,
-                days == 1 ? "" : "s",
-                kpi.getDeadline()
-        );
-    }
-
     private KpiDefinition loadKpiDefinition(Long kpiDefinitionId) {
         return kpiDefinitionRepository.findById(kpiDefinitionId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -289,9 +237,6 @@ public class NotificationService {
         response.setKpiName(kpi.getName());
         response.setOrganizationId(notification.getOrganizationId());
         response.setNotificationType(notification.getNotificationType());
-        if (notification.getNotificationType() != null) {
-            response.setDaysBeforeDeadline(notification.getNotificationType().getDaysBeforeDeadline());
-        }
         response.setDeadline(kpi.getDeadline());
         response.setStatus(notification.getStatus());
         response.setMessage(notification.getMessage());
@@ -312,9 +257,6 @@ public class NotificationService {
                 .orElse(null);
         response.setOrganizationName(orgName);
         response.setNotificationType(notification.getNotificationType());
-        if (notification.getNotificationType() != null) {
-            response.setDaysBeforeDeadline(notification.getNotificationType().getDaysBeforeDeadline());
-        }
         response.setDeadline(kpi.getDeadline());
         response.setStatus(notification.getStatus());
         response.setMessage(notification.getMessage());

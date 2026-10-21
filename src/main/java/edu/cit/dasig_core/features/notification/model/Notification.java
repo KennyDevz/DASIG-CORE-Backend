@@ -41,13 +41,13 @@ public class Notification {
     @Column(nullable = false)
     private String status;
 
-    /** The alert this notification is about (At Risk, Overdue, Alert Acknowledged); null for deadline reminders. */
+    /** The alert this notification is about (At Risk, Overdue, Alert Acknowledged); null for Deadline Updated. */
     @Column(name = "alert_id")
     private Long alertId;
 
     /**
      * Prevents duplicate notifications per KPI and organization. Built per type, e.g.
-     * "SEVEN_DAYS_BEFORE:2026-05-01" (a new deadline allows new reminders) or "AT_RISK:alert-42".
+     * "AT_RISK:alert-42" or "DEADLINE_UPDATED:2026-05-01->2026-06-15".
      * See {@link NotificationKeys}.
      */
     @Column(name = "dedupe_key", nullable = false, length = 120)
