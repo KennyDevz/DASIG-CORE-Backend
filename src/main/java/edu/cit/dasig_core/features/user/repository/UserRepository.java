@@ -5,6 +5,7 @@ import org.springframework.stereotype.Repository;
 
 import edu.cit.dasig_core.features.user.model.User;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -20,4 +21,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByRole(String role);
 
     Optional<User> findByEmail(String email);
+
+    // Used to find active users by role for email dispatch (e.g., KPI alert notifications)
+    List<User> findByRoleAndStatus(String role, String status);
 }

@@ -1,12 +1,14 @@
 package edu.cit.dasig_core.core.smtp;
 
 import jakarta.mail.internet.MimeMessage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
+@Slf4j
 @Service
 public class EmailService {
 
@@ -26,7 +28,7 @@ public class EmailService {
 
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom("Dasig Core Team <no-reply@dasig-core.site>");
+            helper.setFrom("Dasig Core Team auditormechole@gmail.com");
             helper.setTo(recipientEmail);
             helper.setSubject("DASIG Core Platform - Account Initialized");
             helper.setText(
@@ -40,6 +42,29 @@ public class EmailService {
             System.err.println("Fatal: Asynchronous delivery phase failed for " + recipientEmail + ": " + e.getMessage());
         }
     }
+
+    @Async
+    public void sendKpiAlertEmail(String recipientEmail, String userName, String alertType, String severity, String kpiName) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom("Dasig Core Team <no-reply@dasig-core.site>");
+            helper.setTo(recipientEmail);
+            helper.setSubject("DASIG Core - KPI Alert: " + alertType + " (" + severity + ")");
+            helper.setText(
+                    buildKpiAlertPlainText(userName, alertType, severity, kpiName),
+                    buildKpiAlertHtml(userName, alertType, severity, kpiName)
+            );
+
+            mailSender.send(mimeMessage);
+            log.info("KPI alert email sent to {}", recipientEmail);
+        } catch (Exception e) {
+            log.error("Failed to send KPI alert email to {}: {}", recipientEmail, e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // ---- Temporary-password email body builders ----
 
     private String buildPlainTextBody(String userName, String accountDescription, String recipientEmail, String temporaryPassword) {
         return String.format(
@@ -76,6 +101,58 @@ public class EmailService {
                 + "<p style=\"margin:0 0 4px;font-size:14px;color:#111827;\"><strong>Email:</strong> " + safeRecipientEmail + "</p>"
                 + "<p style=\"margin:0 0 24px;font-size:14px;color:#111827;\"><strong>Temporary Password:</strong> " + safeTemporaryPassword + "</p>"
                 + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 24px;\">Please log in and update your security credentials under your profile dashboard options immediately.</p>"
+                + "<div style=\"text-align:center;\">"
+                + "<a href=\"" + LOGIN_URL + "\" style=\"display:inline-block;background-color:#0f172a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 28px;border-radius:6px;\">Log In to DASIG Core</a>"
+                + "</div>"
+                + "</div>"
+                + "<div style=\"background-color:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;\">"
+                + "<p style=\"font-size:12px;color:#9ca3af;margin:0;\">DASIG Core System Management Team</p>"
+                + "</div>"
+                + "</div>"
+                + "</div>";
+    }
+
+    // ---- KPI alert email body builders ----
+
+    private String buildKpiAlertPlainText(String userName, String alertType, String severity, String kpiName) {
+        return String.format(
+                "Hello %s,\n\n" +
+                        "A KPI alert has been triggered on the DASIG Core Platform.\n\n" +
+                        "Alert Details:\n" +
+                        "KPI: %s\n" +
+                        "Alert Type: %s\n" +
+                        "Severity: %s\n\n" +
+                        "Please log in to the platform to review and take appropriate action.\n" +
+                        "Log in here: %s\n\n" +
+                        "Best regards,\n" +
+                        "DASIG System Management Team",
+                userName, kpiName, alertType, severity, LOGIN_URL
+        );
+    }
+
+    private String buildKpiAlertHtml(String userName, String alertType, String severity, String kpiName) {
+        String safeUserName = HtmlUtils.htmlEscape(userName);
+        String safeAlertType = HtmlUtils.htmlEscape(alertType);
+        String safeSeverity = HtmlUtils.htmlEscape(severity);
+        String safeKpiName = HtmlUtils.htmlEscape(kpiName);
+
+        String severityColor = "CRITICAL".equals(severity) ? "#dc2626" : "#f59e0b";
+
+        return "<div style=\"font-family:Arial,Helvetica,sans-serif;background-color:#f4f5f7;padding:32px 0;\">"
+                + "<div style=\"max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;\">"
+                + "<div style=\"background-color:#ffffff;padding:24px 32px;border-bottom:1px solid #e5e7eb;\">"
+                + "<img src=\"" + LOGO_URL + "\" alt=\"DASIG Core\" width=\"48\" height=\"48\" style=\"display:inline-block;vertical-align:middle;border:0;\">"
+                + "<span style=\"color:#111827;font-size:22px;font-weight:bold;vertical-align:middle;margin-left:12px;\">DASIG Core</span>"
+                + "</div>"
+                + "<div style=\"padding:32px;\">"
+                + "<h1 style=\"font-size:18px;color:#111827;margin:0 0 16px;\">KPI Alert Notification</h1>"
+                + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 16px;\">Hello " + safeUserName + ",</p>"
+                + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 24px;\">A KPI alert has been triggered on the DASIG Core Platform.</p>"
+                + "<p style=\"margin:0 0 8px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;\">Alert Details</p>"
+                + "<p style=\"margin:0 0 4px;font-size:14px;color:#111827;\"><strong>KPI:</strong> " + safeKpiName + "</p>"
+                + "<p style=\"margin:0 0 4px;font-size:14px;color:#111827;\"><strong>Alert Type:</strong> " + safeAlertType + "</p>"
+                + "<p style=\"margin:0 0 24px;font-size:14px;color:" + severityColor + ";font-weight:bold;\"><strong>Severity:</strong> " + safeSeverity + "</p>"
+                + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 24px;\">Please log in to the platform to review and take appropriate action.</p>"
                 + "<div style=\"text-align:center;\">"
                 + "<a href=\"" + LOGIN_URL + "\" style=\"display:inline-block;background-color:#0f172a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 28px;border-radius:6px;\">Log In to DASIG Core</a>"
                 + "</div>"

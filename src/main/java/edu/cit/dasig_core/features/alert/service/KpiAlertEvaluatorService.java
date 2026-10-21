@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.core.smtp.EmailService;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
@@ -9,6 +10,8 @@ import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.kpisubmission.util.KpiPaceCalculator;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
+import edu.cit.dasig_core.features.user.model.User;
+import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +44,8 @@ public class KpiAlertEvaluatorService {
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final AlertRepository alertRepository;
     private final NotificationService notificationService;
+    private final EmailService emailService;
+    private final UserRepository userRepository;
 
     @Value("${app.business-timezone:Asia/Manila}")
     private String businessTimezone;
@@ -109,6 +114,12 @@ public class KpiAlertEvaluatorService {
         log.info("Created {} alert for KPI: {}", type, kpi.getName());
 
         notificationService.notifyAlertCreated(kpi, alert);
+
+        // Dispatch email notifications to all active DASIG_ADMIN users
+        List<User> activeAdmins = userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active");
+        for (User admin : activeAdmins) {
+            emailService.sendKpiAlertEmail(admin.getEmail(), admin.getName(), type, severity, kpi.getName());
+        }
     }
 
     private void resolveOpen(List<Alert> openAlerts, String type, String reason) {
