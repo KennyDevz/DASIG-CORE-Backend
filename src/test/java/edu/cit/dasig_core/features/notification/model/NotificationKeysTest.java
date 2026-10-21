@@ -9,21 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NotificationKeysTest {
 
     @Test
-    void deadlineReminder_includesTypeAndDeadline() {
-        String key = NotificationKeys.deadlineReminder(NotificationType.SEVEN_DAYS_BEFORE, LocalDate.of(2026, 5, 1));
-
-        assertThat(key).isEqualTo("SEVEN_DAYS_BEFORE:2026-05-01");
-    }
-
-    @Test
-    void deadlineReminder_changesWhenDeadlineChanges() {
-        String before = NotificationKeys.deadlineReminder(NotificationType.TWO_DAYS_BEFORE, LocalDate.of(2026, 5, 1));
-        String after = NotificationKeys.deadlineReminder(NotificationType.TWO_DAYS_BEFORE, LocalDate.of(2026, 6, 15));
-
-        assertThat(before).isNotEqualTo(after);
-    }
-
-    @Test
     void forAlert_isUniquePerAlertAndType() {
         assertThat(NotificationKeys.forAlert(NotificationType.AT_RISK, 42L)).isEqualTo("AT_RISK:alert-42");
         assertThat(NotificationKeys.forAlert(NotificationType.AT_RISK, 43L))

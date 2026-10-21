@@ -122,7 +122,7 @@ class NotificationServiceTest {
         notification.setId(1L);
         notification.setKpiDefinitionId(1L);
         notification.setOrganizationId(9L);
-        notification.setNotificationType(NotificationType.SEVEN_DAYS_BEFORE);
+        notification.setNotificationType(NotificationType.AT_RISK);
         notification.setStatus(Notification.STATUS_UNREAD);
         notification.setMessage("msg");
         notification.setAlertId(7L);
@@ -225,7 +225,7 @@ class NotificationServiceTest {
         notification.setId(1L);
         notification.setKpiDefinitionId(1L);
         notification.setOrganizationId(9L);
-        notification.setNotificationType(NotificationType.SEVEN_DAYS_BEFORE);
+        notification.setNotificationType(NotificationType.AT_RISK);
         notification.setStatus(Notification.STATUS_UNREAD);
         when(notificationRepository.findById(1L)).thenReturn(Optional.of(notification));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -235,74 +235,6 @@ class NotificationServiceTest {
 
         assertThat(notification.getStatus()).isEqualTo(Notification.STATUS_READ);
         assertThat(response.getStatus()).isEqualTo(Notification.STATUS_READ);
-    }
-
-    // ---- createDeadlineNotificationsForKpi ----
-
-    @Test
-    void createDeadlineNotificationsForKpi_doesNothingWhenKpiOrDeadlineIsNull() {
-        notificationService.createDeadlineNotificationsForKpi(null);
-
-        KpiDefinition kpiWithoutDeadline = kpiWithDeadline(null);
-        notificationService.createDeadlineNotificationsForKpi(kpiWithoutDeadline);
-
-        verifyNoInteractions(organizationRepository, notificationRepository);
-    }
-
-    @Test
-    void createDeadlineNotificationsForKpi_createsSevenDayNotificationWhenExactlySevenDaysOut() {
-        KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(7));
-        Organization org = new Organization();
-        org.setId(9L);
-        kpi.getCommittee().setOrganizations(List.of(org));
-
-        String expectedKey = "SEVEN_DAYS_BEFORE:" + kpi.getDeadline();
-        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(
-                1L, 9L, expectedKey)).thenReturn(false);
-
-        notificationService.createDeadlineNotificationsForKpi(kpi);
-
-        verify(notificationRepository).save(argThat(n ->
-                n.getNotificationType() == NotificationType.SEVEN_DAYS_BEFORE
-                        && n.getOrganizationId().equals(9L)
-                        && n.getKpiDefinitionId().equals(1L)
-                        && expectedKey.equals(n.getDedupeKey())
-                        && n.getAlertId() == null));
-    }
-
-    @Test
-    void createDeadlineNotificationsForKpi_doesNotDuplicateWhenNotificationAlreadyExists() {
-        KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(7));
-        Organization org = new Organization();
-        org.setId(9L);
-        kpi.getCommittee().setOrganizations(List.of(org));
-
-        when(notificationRepository.existsByKpiDefinitionIdAndOrganizationIdAndDedupeKey(
-                1L, 9L, "SEVEN_DAYS_BEFORE:" + kpi.getDeadline())).thenReturn(true);
-
-        notificationService.createDeadlineNotificationsForKpi(kpi);
-
-        verify(notificationRepository, never()).save(any());
-    }
-
-    @Test
-    void createDeadlineNotificationsForKpi_doesNothingWhenNotSevenOrTwoDaysOut() {
-        KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(5));
-
-        notificationService.createDeadlineNotificationsForKpi(kpi);
-
-        verifyNoInteractions(organizationRepository);
-        verify(notificationRepository, never()).save(any());
-    }
-
-    @Test
-    void createDeadlineNotificationsForKpi_skipsWhenCommitteeIsNull() {
-        KpiDefinition kpi = kpiWithDeadline(LocalDate.now().plusDays(7));
-        kpi.setCommittee(null);
-
-        notificationService.createDeadlineNotificationsForKpi(kpi);
-
-        verifyNoInteractions(organizationRepository, notificationRepository);
     }
 
     // ---- Alert notifications (UC-4.3) ----

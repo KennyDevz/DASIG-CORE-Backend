@@ -16,7 +16,6 @@ public class NotificationDetailResponse {
     private String organizationName;
     private NotificationType notificationType;
     /** Only set for deadline reminders; null for alert-related notification types. */
-    private Integer daysBeforeDeadline;
     private LocalDate deadline;
     private String status;
     private String message;
