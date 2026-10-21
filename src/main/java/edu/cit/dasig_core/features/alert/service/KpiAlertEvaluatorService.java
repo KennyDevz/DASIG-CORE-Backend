@@ -111,6 +111,8 @@ public class KpiAlertEvaluatorService {
         alert.setSeverity(severity);
         alert.setStatus(Alert.STATUS_UNACKNOWLEDGED);
         alertRepository.save(alert);
+        // save() populates the generated ID on the managed instance (IDENTITY strategy)
+        Long alertId = alert.getId();
         log.info("Created {} alert for KPI: {}", type, kpi.getName());
 
         notificationService.notifyAlertCreated(kpi, alert);
@@ -118,7 +120,7 @@ public class KpiAlertEvaluatorService {
         // Dispatch email notifications to all active DASIG_ADMIN users
         List<User> activeAdmins = userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active");
         for (User admin : activeAdmins) {
-            emailService.sendKpiAlertEmail(admin.getEmail(), admin.getName(), type, severity, kpi.getName());
+            emailService.sendKpiAlertEmail(admin.getEmail(), admin.getName(), type, severity, kpi.getName(), alertId);
         }
     }
 
