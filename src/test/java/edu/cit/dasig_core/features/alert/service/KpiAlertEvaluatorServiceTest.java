@@ -10,6 +10,7 @@ import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
+import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -177,6 +178,28 @@ class KpiAlertEvaluatorServiceTest {
         evaluatorService.evaluateAllKpiAlerts();
 
         assertResolved(overdue, KpiAlertEvaluatorService.REASON_TARGET_MET_LATE);
+    }
+
+    @Test
+    void emailsAdminsWithTheCreatedAlertId() {
+        givenKpi(CREATED, DEADLINE, 20.0); // behind pace -> AT_RISK alert
+        givenOpenAlerts();
+        when(alertRepository.save(any())).thenAnswer(invocation -> {
+            Alert saved = invocation.getArgument(0);
+            saved.setId(77L); // the generated ID is populated on the managed instance
+            return saved;
+        });
+
+        User admin = new User();
+        admin.setName("Admin");
+        admin.setEmail("admin@dasig-core.site");
+        when(userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active")).thenReturn(List.of(admin));
+
+        evaluatorService.evaluateAllKpiAlerts();
+
+        verify(emailService).sendKpiAlertEmail(
+                "admin@dasig-core.site", "Admin",
+                Alert.TYPE_AT_RISK, Alert.SEVERITY_WARNING, "KPI 1", 77L);
     }
 
     // ---- helpers ----
