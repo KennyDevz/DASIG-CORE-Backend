@@ -22,7 +22,10 @@ import static org.mockito.Mockito.when;
 class EmailServiceTest {
 
     private static final String FRONTEND_URL = "https://www.dasig-core.site";
-    private static final String ALERT_URL = FRONTEND_URL + "/dashboard/admin/alerts?alertId=42";
+    // Plain-text URL (bare & separator) — used for plain-text body assertions.
+    private static final String ALERT_URL = FRONTEND_URL + "/dashboard/admin/alerts?alertId=42&loginHint=admin%40dasig-core.site";
+    // HTML URL (& escaped to &amp; by HtmlUtils.htmlEscape) — used for HTML body assertions.
+    private static final String ALERT_URL_HTML = ALERT_URL.replace("&", "&amp;");
 
     @Mock
     private JavaMailSender mailSender;
@@ -51,11 +54,12 @@ class EmailServiceTest {
         assertThat(html).contains("background-color: #007bff");
 
         // the deep link is also visible as raw text below the button (anti-phishing)
-        assertThat(html).contains("href=\"" + ALERT_URL + "\"");
-        assertThat(html).contains(">" + ALERT_URL + "</a>");
+        // NOTE: HtmlUtils.htmlEscape escapes & to &amp; inside HTML attributes
+        assertThat(html).contains("href=\"" + ALERT_URL_HTML + "\"");
+        assertThat(html).contains(">" + ALERT_URL_HTML + "</a>");
         assertThat(html).contains("copy and paste this link into your browser");
 
-        // plain text also carries the raw link
+        // plain text also carries the raw link (bare & separator, no escaping)
         assertThat(plainText).contains(ALERT_URL);
 
         // header logo is restored

@@ -9,6 +9,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @Slf4j
 @Service
 public class EmailService {
@@ -51,7 +54,8 @@ public class EmailService {
     @Async
     public void sendKpiAlertEmail(String recipientEmail, String userName, String alertType, String severity, String kpiName, Long alertId) {
         try {
-            String alertUrl = buildAlertUrl(alertId);
+            String encodedEmail = URLEncoder.encode(recipientEmail, StandardCharsets.UTF_8);
+            String alertUrl = buildAlertUrl(alertId, encodedEmail);
 
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -71,10 +75,13 @@ public class EmailService {
         }
     }
 
-    /** Deep link that opens the Alerts page with the given alert already selected. */
-    private String buildAlertUrl(Long alertId) {
+    /** Deep link that opens the Alerts page with the given alert already selected and the recipient pre-hinted for MSAL login. */
+    private String buildAlertUrl(Long alertId, String encodedEmail) {
         String base = frontendUrl + ALERTS_PATH;
-        return alertId != null ? base + "?alertId=" + alertId : base;
+        if (alertId != null) {
+            return base + "?alertId=" + alertId + "&loginHint=" + encodedEmail;
+        }
+        return base;
     }
 
     // ---- Temporary-password email body builders ----
