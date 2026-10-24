@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -72,6 +73,34 @@ class EmailServiceTest {
                 "admin@dasig-core.site", "Admin", "AT_RISK", "WARNING", "Graduate Employment Rate", null);
 
         assertThat(htmlBody()).contains("href=\"" + FRONTEND_URL + "/dashboard/admin/alerts\"");
+    }
+
+    @Test
+    void kpiAssignedEmail_listsKpiDetailsAndLinksToMemberKpiPage() throws Exception {
+        emailService.sendKpiAssignedEmail("member@gmail.com", "Member", "STAFF", 10L,
+                "Startups Incubated", "Committee A", "100 startups", LocalDate.of(2026, 12, 5));
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - New KPI assigned: Startups Incubated");
+        assertThat(html).contains("New KPI Assigned", "Startups Incubated", "Committee A", "100 startups", "Dec 05, 2026");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/staff/kpis/10\"");
+        assertThat(html).contains(">View KPI</a>");
+        assertThat(html).doesNotContain("loginHint");
+        assertThat(plainTextBody()).contains(FRONTEND_URL + "/dashboard/staff/kpis/10");
+    }
+
+    @Test
+    void kpiDeadlineUpdatedEmail_showsBothDatesAndRemark_andLinksToLeadKpiPage() throws Exception {
+        emailService.sendKpiDeadlineUpdatedEmail("lead@test.com", "Lead", "TBI_MANAGER", 10L,
+                "Startups Incubated", "Committee A", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 12, 5),
+                "Extended after <review>");
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - KPI deadline updated: Startups Incubated");
+        assertThat(html).contains("Nov 01, 2026", "Dec 05, 2026");
+        // user-entered text is HTML-escaped
+        assertThat(html).contains("Extended after &lt;review&gt;");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/tbi_manager/kpis/10\"");
     }
 
     @Test
