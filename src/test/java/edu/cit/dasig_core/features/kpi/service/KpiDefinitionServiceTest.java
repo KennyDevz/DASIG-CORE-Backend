@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpi.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.kpi.dto.CreateKpiDefinitionRequest;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -57,6 +59,8 @@ class KpiDefinitionServiceTest {
     private SubmissionDocumentRepository submissionDocumentRepository;
     @Mock
     private OverdueExplanationRepository overdueExplanationRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private KpiDefinitionService kpiDefinitionService;
 
@@ -70,7 +74,8 @@ class KpiDefinitionServiceTest {
                 alertRepository,
                 kpiSubmissionRepository,
                 submissionDocumentRepository,
-                overdueExplanationRepository
+                overdueExplanationRepository,
+                eventPublisher
         );
     }
 
@@ -114,6 +119,7 @@ class KpiDefinitionServiceTest {
 
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getCommitteeId()).isEqualTo(1L);
+        verify(eventPublisher).publishEvent(KpiEmailEvent.assigned(10L));
     }
 
     @Test
@@ -322,6 +328,8 @@ class KpiDefinitionServiceTest {
         verify(alertRepository).saveAll(List.of(overdue));
         verify(notificationService).notifyDeadlineUpdated(existingKpi, LocalDate.now().minusDays(1), newDeadline,
                 "Extending after talking to the committee.");
+        verify(eventPublisher).publishEvent(KpiEmailEvent.deadlineUpdated(1L, LocalDate.now().minusDays(1), newDeadline,
+                "Extending after talking to the committee."));
     }
 
     @Test
@@ -334,6 +342,7 @@ class KpiDefinitionServiceTest {
 
         verify(alertRepository, never()).findByKpiDefinitionIdAndStatusIn(any(), any());
         verify(notificationService, never()).notifyDeadlineUpdated(any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(KpiEmailEvent.class));
     }
 
     @Test

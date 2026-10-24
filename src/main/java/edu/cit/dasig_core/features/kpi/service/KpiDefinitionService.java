@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpi.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.kpi.dto.CreateKpiDefinitionRequest;
@@ -21,6 +22,7 @@ import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionReposit
 import edu.cit.dasig_core.features.kpisubmission.repository.SubmissionDocumentRepository;
 import edu.cit.dasig_core.features.notification.repository.NotificationRepository;
 import edu.cit.dasig_core.features.notification.service.NotificationService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,7 @@ public class KpiDefinitionService {
     private final KpiSubmissionRepository kpiSubmissionRepository;
     private final SubmissionDocumentRepository submissionDocumentRepository;
     private final OverdueExplanationRepository overdueExplanationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final DateTimeFormatter DEADLINE_FORMAT = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH);
 
@@ -50,7 +53,8 @@ public class KpiDefinitionService {
             AlertRepository alertRepository,
             KpiSubmissionRepository kpiSubmissionRepository,
             SubmissionDocumentRepository submissionDocumentRepository,
-            OverdueExplanationRepository overdueExplanationRepository
+            OverdueExplanationRepository overdueExplanationRepository,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.kpiDefinitionRepository = kpiDefinitionRepository;
         this.committeeRepository = committeeRepository;
@@ -60,6 +64,7 @@ public class KpiDefinitionService {
         this.kpiSubmissionRepository = kpiSubmissionRepository;
         this.submissionDocumentRepository = submissionDocumentRepository;
         this.overdueExplanationRepository = overdueExplanationRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -78,6 +83,10 @@ public class KpiDefinitionService {
         kpiDef.setCommittee(committee);
 
         KpiDefinition savedKpiDef = kpiDefinitionRepository.saveAndFlush(kpiDef);
+
+        // Email the KPI assignment to the committee's Leads and Members after the save commits (UC-2.1, UC-4.5)
+        eventPublisher.publishEvent(KpiEmailEvent.assigned(savedKpiDef.getId()));
+
         return mapToResponse(savedKpiDef);
     }
 
@@ -124,6 +133,8 @@ public class KpiDefinitionService {
         if (deadlineChanged) {
             String latestRemark = resolveOpenAlerts(id, updatedKpiDef.getDeadline());
             notificationService.notifyDeadlineUpdated(updatedKpiDef, oldDeadline, updatedKpiDef.getDeadline(), latestRemark);
+            // Email the same change to the committee's Leads and Members after the save commits (UC-2.2, UC-4.5)
+            eventPublisher.publishEvent(KpiEmailEvent.deadlineUpdated(id, oldDeadline, updatedKpiDef.getDeadline(), latestRemark));
         }
 
         return mapToResponse(updatedKpiDef);

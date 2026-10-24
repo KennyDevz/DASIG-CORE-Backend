@@ -11,6 +11,11 @@ import org.springframework.web.util.HtmlUtils;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -18,6 +23,7 @@ public class EmailService {
 
     private static final String LOGO_URL = "https://www.dasig-core.site/dasig_logo.svg";
     private static final String ALERTS_PATH = "/dashboard/admin/alerts";
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH);
 
     /** Public base URL of the frontend SPA, used to build deep links inside emails. */
     @Value("${app.frontend.url}")
@@ -183,6 +189,121 @@ public class EmailService {
                 + "<p style=\"font-size: 12px; color: #666666; margin-top: 10px;\">"
                 + "If the button above does not work, copy and paste this link into your browser:<br>"
                 + "<a href=\"" + safeAlertUrl + "\" style=\"color: #007bff; word-break: break-all;\">" + safeAlertUrl + "</a>"
+                + "</p>"
+                + "</div>"
+                + "<div style=\"background-color:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;\">"
+                + "<p style=\"font-size:12px;color:#9ca3af;margin:0;\">DASIG Core System Management Team</p>"
+                + "</div>"
+                + "</div>"
+                + "</div>";
+    }
+
+    // ---- KPI assigned / deadline updated emails (UC-2.1, UC-2.2, UC-4.5) ----
+
+    /** Tells a Committee Lead or Member that a KPI was assigned to their committee. Called by KpiEmailListener in the background. */
+    public void sendKpiAssignedEmail(String recipientEmail, String userName, String role, Long kpiId,
+                                     String kpiName, String committeeName, String target, LocalDate deadline) {
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Committee", committeeName});
+        details.add(new String[]{"Target", target});
+        details.add(new String[]{"Deadline", formatDate(deadline)});
+
+        sendKpiEmail(recipientEmail, "DASIG Core - New KPI assigned: " + kpiName, "New KPI Assigned", userName,
+                "A new KPI has been assigned to your committee on the DASIG Core Platform.",
+                details, buildKpiUrl(role, kpiId));
+    }
+
+    /** Tells a Committee Lead or Member that the Admin changed a KPI's deadline. Called by KpiEmailListener in the background. */
+    public void sendKpiDeadlineUpdatedEmail(String recipientEmail, String userName, String role, Long kpiId,
+                                            String kpiName, String committeeName, LocalDate oldDeadline,
+                                            LocalDate newDeadline, String adminRemark) {
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Committee", committeeName});
+        details.add(new String[]{"Previous deadline", formatDate(oldDeadline)});
+        details.add(new String[]{"New deadline", formatDate(newDeadline)});
+        if (adminRemark != null && !adminRemark.isBlank()) {
+            details.add(new String[]{"Admin remark", adminRemark});
+        }
+
+        sendKpiEmail(recipientEmail, "DASIG Core - KPI deadline updated: " + kpiName, "KPI Deadline Updated", userName,
+                "The deadline of a KPI assigned to your committee has been changed.",
+                details, buildKpiUrl(role, kpiId));
+    }
+
+    private void sendKpiEmail(String recipientEmail, String subject, String title, String userName,
+                              String intro, List<String[]> details, String kpiUrl) {
+        String name = userName != null && !userName.isBlank() ? userName : "there";
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom("Dasig Core Team <no-reply@dasig-core.site>");
+            helper.setTo(recipientEmail);
+            helper.setSubject(subject);
+            helper.setText(
+                    buildKpiPlainText(name, intro, details, kpiUrl),
+                    buildKpiHtml(title, name, intro, details, kpiUrl)
+            );
+
+            mailSender.send(mimeMessage);
+            log.info("KPI email '{}' sent to {}", title, recipientEmail);
+        } catch (Exception e) {
+            // A failed email is logged only; the KPI change that triggered it is already saved
+            log.error("Failed to send KPI email '{}' to {}: {}", title, recipientEmail, e.getMessage());
+        }
+    }
+
+    /** Link to the KPI page of the recipient's dashboard (no login hint, so local and Microsoft accounts both work). */
+    private String buildKpiUrl(String role, Long kpiId) {
+        String dashboard = "TBI_MANAGER".equals(role) ? "tbi_manager" : "staff";
+        return frontendUrl + "/dashboard/" + dashboard + "/kpis/" + kpiId;
+    }
+
+    private String formatDate(LocalDate date) {
+        return date != null ? date.format(DATE_FORMAT) : "Not set";
+    }
+
+    private String buildKpiPlainText(String userName, String intro, List<String[]> details, String kpiUrl) {
+        StringBuilder text = new StringBuilder("Hello " + userName + ",\n\n" + intro + "\n\n");
+        for (String[] detail : details) {
+            text.append(detail[0]).append(": ").append(detail[1]).append("\n");
+        }
+        text.append("\nView this KPI here: ").append(kpiUrl).append("\n\n")
+                .append("Best regards,\n")
+                .append("DASIG System Management Team");
+        return text.toString();
+    }
+
+    private String buildKpiHtml(String title, String userName, String intro, List<String[]> details, String kpiUrl) {
+        String safeUrl = HtmlUtils.htmlEscape(kpiUrl);
+        StringBuilder rows = new StringBuilder();
+        for (String[] detail : details) {
+            rows.append("<p style=\"margin:0 0 4px;font-size:14px;color:#111827;\"><strong>")
+                    .append(HtmlUtils.htmlEscape(detail[0])).append(":</strong> ")
+                    .append(HtmlUtils.htmlEscape(detail[1] != null ? detail[1] : "")).append("</p>");
+        }
+
+        return "<div style=\"font-family:Arial,Helvetica,sans-serif;background-color:#f4f5f7;padding:32px 0;\">"
+                + "<div style=\"max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;\">"
+                + "<div style=\"background-color:#ffffff;padding:24px 32px;border-bottom:1px solid #e5e7eb;\">"
+                + "<img src=\"" + LOGO_URL + "\" alt=\"DASIG Core\" width=\"48\" height=\"48\" style=\"display:inline-block;vertical-align:middle;border:0;\">"
+                + "<span style=\"color:#111827;font-size:22px;font-weight:bold;vertical-align:middle;margin-left:12px;\">DASIG Core</span>"
+                + "</div>"
+                + "<div style=\"padding:32px;\">"
+                + "<h1 style=\"font-size:18px;color:#111827;margin:0 0 16px;\">" + HtmlUtils.htmlEscape(title) + "</h1>"
+                + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 16px;\">Hello " + HtmlUtils.htmlEscape(userName) + ",</p>"
+                + "<p style=\"font-size:14px;color:#374151;line-height:1.6;margin:0 0 24px;\">" + HtmlUtils.htmlEscape(intro) + "</p>"
+                + "<p style=\"margin:0 0 8px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;\">KPI Details</p>"
+                + rows
+                + "<div style=\"margin: 24px 0 20px;\">"
+                + "<a href=\"" + safeUrl + "\" style=\"background-color: #007bff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">"
+                + "View KPI"
+                + "</a>"
+                + "</div>"
+                + "<p style=\"font-size: 12px; color: #666666; margin-top: 10px;\">"
+                + "If the button above does not work, copy and paste this link into your browser:<br>"
+                + "<a href=\"" + safeUrl + "\" style=\"color: #007bff; word-break: break-all;\">" + safeUrl + "</a>"
                 + "</p>"
                 + "</div>"
                 + "<div style=\"background-color:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;\">"

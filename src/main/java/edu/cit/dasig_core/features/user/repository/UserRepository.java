@@ -5,6 +5,7 @@ import org.springframework.stereotype.Repository;
 
 import edu.cit.dasig_core.features.user.model.User;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,4 +25,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // Used to find active users by role for email dispatch (e.g., KPI alert notifications)
     List<User> findByRoleAndStatus(String role, String status);
+
+    // Active Committee Leads assigned to a committee (KPI emails, UC-4.5)
+    List<User> findByRoleAndStatusAndCommittees_Id(String role, String status, Long committeeId);
+
+    // Active users of a role in any of the given organizations (KPI emails, UC-4.5)
+    List<User> findByRoleAndStatusAndOrganizationIdIn(String role, String status, Collection<Long> organizationIds);
 }
