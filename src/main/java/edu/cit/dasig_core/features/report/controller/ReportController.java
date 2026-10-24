@@ -26,21 +26,13 @@ public class ReportController {
 
     @PostMapping("/generate/committee")
     public ResponseEntity<ReportResponse> generateByCommittee(@Valid @RequestBody GenerateCommitteeReportRequest request) {
-        ReportResponse response = reportService.generateCommitteeReport(
-                request.getCommitteeId(),
-                request.getPeriodFrom(),
-                request.getPeriodTo()
-        );
+        ReportResponse response = reportService.generateCommitteeReport(request.getCommitteeId());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/generate/kpi")
     public ResponseEntity<ReportResponse> generateByKpi(@Valid @RequestBody GenerateKpiReportRequest request) {
-        ReportResponse response = reportService.generateKpiReport(
-                request.getKpiDefinitionId(),
-                request.getPeriodFrom(),
-                request.getPeriodTo()
-        );
+        ReportResponse response = reportService.generateKpiReport(request.getKpiDefinitionId());
         return ResponseEntity.ok(response);
     }
 

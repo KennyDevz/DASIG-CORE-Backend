@@ -70,9 +70,7 @@ public class ReportService {
         return LocalDate.now(ZoneId.of(businessTimezone));
     }
 
-    public ReportResponse generateCommitteeReport(Long committeeId, LocalDate periodFrom, LocalDate periodTo) {
-        validatePeriod(periodFrom, periodTo);
-
+    public ReportResponse generateCommitteeReport(Long committeeId) {
         Committee committee = committeeRepository.findById(committeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Committee not found with ID: " + committeeId));
 
@@ -87,12 +85,10 @@ public class ReportService {
         String contextHeader = "Generate a comprehensive committee performance report covering all incubator "
                 + "organizations under the \"" + committee.getName() + "\" committee.\n\n";
 
-        return buildAndSaveReport(submissions, committeeId, ReportType.COMMITTEE, null, periodFrom, periodTo, contextHeader);
+        return buildAndSaveReport(submissions, committeeId, ReportType.COMMITTEE, null, contextHeader);
     }
 
-    public ReportResponse generateKpiReport(Long kpiDefinitionId, LocalDate periodFrom, LocalDate periodTo) {
-        validatePeriod(periodFrom, periodTo);
-
+    public ReportResponse generateKpiReport(Long kpiDefinitionId) {
         // 1. Fetch the KPI to find out which committee owns it
         KpiDefinition kpi = kpiDefinitionRepository.findById(kpiDefinitionId)
                 .orElseThrow(() -> new IllegalArgumentException("KPI not found with ID: " + kpiDefinitionId));
@@ -103,19 +99,7 @@ public class ReportService {
         String contextHeader = "Generate a specific performance report focused strictly on the following single KPI, "
                 + "covering all incubator organizations under the \"" + kpi.getCommittee().getName() + "\" committee that report on it.\n\n";
 
-        return buildAndSaveReport(submissions, kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId, periodFrom, periodTo, contextHeader);
-    }
-
-    // Guards against an inverted range (periodFrom after periodTo), which would otherwise silently
-    // match zero submissions in buildAndSaveReport's date filter and produce an empty report
-    // instead of a clear error telling the caller to fix the dates.
-    private void validatePeriod(LocalDate periodFrom, LocalDate periodTo) {
-        if (periodFrom.isAfter(periodTo)) {
-            throw new IllegalArgumentException("Period from date must not be after period to date.");
-        }
-        if (periodTo.isAfter(today())) {
-            throw new IllegalArgumentException("Period to date must not be later than today.");
-        }
+        return buildAndSaveReport(submissions, kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId, contextHeader);
     }
 
     public ReportResponse getReport(String reportId) {
@@ -481,19 +465,21 @@ public class ReportService {
             Long committeeId,
             ReportType reportType,
             Long kpiDefinitionId,
-            LocalDate periodFrom,
-            LocalDate periodTo,
             String contextHeader) {
 
-        // Filter ONLY the official submissions that fall within the requested reporting window
+        // No user-supplied date range: the report covers every official (FINAL) submission up to today.
+        LocalDate periodTo = today();
         List<KpiSubmission> filteredWindowSubmissions = allSubmissions.stream()
-                .filter(s -> {
-                    LocalDate d = s.getSubmissionDate();
-                    return s.getSubmissionType() == SubmissionType.FINAL
-                            && (d.isEqual(periodFrom) || d.isAfter(periodFrom))
-                            && (d.isEqual(periodTo) || d.isBefore(periodTo));
-                })
+                .filter(s -> s.getSubmissionType() == SubmissionType.FINAL
+                        && !s.getSubmissionDate().isAfter(periodTo))
                 .toList();
+
+        // The window actually covered, persisted so the history table and PDF header stay populated:
+        // earliest included submission through today (or just today when there is nothing to report on).
+        LocalDate periodFrom = filteredWindowSubmissions.stream()
+                .map(KpiSubmission::getSubmissionDate)
+                .min(LocalDate::compareTo)
+                .orElse(periodTo);
 
         // Build Prompt
         StringBuilder prompt = new StringBuilder();

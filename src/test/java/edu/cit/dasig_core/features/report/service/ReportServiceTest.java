@@ -85,30 +85,10 @@ class ReportServiceTest {
     void generateCommitteeReport_throwsWhenCommitteeNotFound() {
         when(committeeRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now()))
+        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Committee not found with ID: 1");
 
-        verify(reportRepository, never()).save(any());
-    }
-
-    @Test
-    void generateCommitteeReport_throwsWhenPeriodFromIsAfterPeriodTo() {
-        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L, LocalDate.now(), LocalDate.now().minusDays(1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Period from date must not be after period to date.");
-
-        verify(committeeRepository, never()).findById(any());
-        verify(reportRepository, never()).save(any());
-    }
-
-    @Test
-    void generateCommitteeReport_throwsWhenPeriodToIsInTheFuture() {
-        assertThatThrownBy(() -> reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now().plusDays(1)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Period to date must not be later than today.");
-
-        verify(committeeRepository, never()).findById(any());
         verify(reportRepository, never()).save(any());
     }
 
@@ -126,7 +106,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         assertThat(response.getCommitteeId()).isEqualTo(1L);
@@ -153,7 +133,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("FAILED");
         assertThat(response.getNarrativeText()).contains("Groq is down");
@@ -177,7 +157,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         assertThat(response.getSections()).hasSize(4);
@@ -198,7 +178,7 @@ class ReportServiceTest {
             return report;
         });
 
-        reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        reportService.generateCommitteeReport(1L);
 
         verify(submissionRepository, never()).findByOrganizationIdIn(any());
     }
@@ -207,7 +187,7 @@ class ReportServiceTest {
     void generateKpiReport_throwsWhenKpiNotFound() {
         when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> reportService.generateKpiReport(1L, LocalDate.now().minusMonths(1), LocalDate.now()))
+        assertThatThrownBy(() -> reportService.generateKpiReport(1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("KPI not found with ID: 1");
     }
@@ -230,7 +210,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateKpiReport(5L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateKpiReport(5L);
 
         assertThat(response.getKpiDefinitionId()).isEqualTo(5L);
         assertThat(response.getCommitteeId()).isEqualTo(3L);
@@ -424,8 +404,7 @@ class ReportServiceTest {
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
 
-        ReportResponse response = reportService.generateCommitteeReport(
-                1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         verify(llmApiClient).generateReport(promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
@@ -513,7 +492,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         String resolvedText = response.getSections().get(0).getText();
         assertThat(resolvedText).contains("Cebu TBI Hub delivered 10 startups this period.");
@@ -594,7 +573,7 @@ class ReportServiceTest {
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
 
-        reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        reportService.generateCommitteeReport(1L);
 
         verify(llmApiClient).generateReport(promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
@@ -634,7 +613,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         String resolvedText = response.getSections().get(0).getText();
@@ -670,7 +649,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         String resolvedText = response.getSections().get(0).getText();
@@ -707,7 +686,7 @@ class ReportServiceTest {
             return report;
         });
 
-        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+        ReportResponse response = reportService.generateCommitteeReport(1L);
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         assertThat(response.getSections().get(0).getText())
