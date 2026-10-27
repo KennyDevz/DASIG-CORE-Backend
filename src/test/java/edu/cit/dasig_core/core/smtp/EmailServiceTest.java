@@ -104,6 +104,49 @@ class EmailServiceTest {
     }
 
     @Test
+    void submissionForReviewEmail_linksLeadToSubmissionHistory() throws Exception {
+        emailService.sendSubmissionForReviewEmail("lead@test.com", "Lead", "Startups Incubated", "TBI Alpha",
+                "Maria", "40 startups", "Due by Dec 15, 2026", LocalDate.of(2026, 10, 20), "SUB-0050");
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - KPI submission to review: Startups Incubated");
+        assertThat(html).contains("TBI Alpha", "Maria", "40 startups", "SUB-0050", "Oct 20, 2026");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/tbi_manager/submission-history\"");
+        assertThat(html).contains(">Review Submission</a>");
+    }
+
+    @Test
+    void submissionReviewedEmail_showsRejectionReason_andLinksMemberToSubmissionHistory() throws Exception {
+        emailService.sendSubmissionReviewedEmail("member@gmail.com", "Member", "Startups Incubated", "40 startups",
+                "SUB-0050", false, "Lead", "Missing <evidence>");
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - Your KPI submission was rejected: Startups Incubated");
+        assertThat(html).contains("Rejected", "Missing &lt;evidence&gt;");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/staff/submission-history\"");
+    }
+
+    @Test
+    void submissionReviewedEmail_approvedHasNoReason() throws Exception {
+        emailService.sendSubmissionReviewedEmail("member@gmail.com", "Member", "Startups Incubated", "40 startups",
+                "SUB-0050", true, "Lead", null);
+
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - Your KPI submission was approved: Startups Incubated");
+        assertThat(htmlBody()).contains("Approved").doesNotContain("Reason:");
+    }
+
+    @Test
+    void finalValueApprovedEmail_linksAdminToKpiDetail() throws Exception {
+        emailService.sendFinalValueApprovedEmail("admin@gmail.com", "Admin", 10L, "Startups Incubated", "Committee A",
+                "TBI Alpha", "40 startups", "Due by Dec 15, 2026", "Lead");
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - Final KPI value approved: Startups Incubated");
+        assertThat(html).contains("Committee A", "TBI Alpha", "40 startups", "Lead");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/admin/kpis/10\"");
+    }
+
+    @Test
     void temporaryPasswordEmail_linksToFrontendLoginPage() throws Exception {
         emailService.sendTemporaryPasswordEmail("staff@dasig-core.site", "Staff", "TempPass123", "STAFF");
 
