@@ -5,6 +5,9 @@ import edu.cit.dasig_core.core.smtp.EmailService;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
+import edu.cit.dasig_core.features.kpisubmission.model.SubmissionReviewStatus;
+import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
 import edu.cit.dasig_core.features.organization.model.Organization;
 import edu.cit.dasig_core.features.user.model.User;
 import edu.cit.dasig_core.features.user.repository.UserRepository;
@@ -37,13 +40,15 @@ class KpiEmailListenerTest {
     private UserRepository userRepository;
     @Mock
     private EmailService emailService;
+    @Mock
+    private KpiSubmissionRepository kpiSubmissionRepository;
 
     private KpiEmailListener listener;
     private Committee committee;
 
     @BeforeEach
     void setUp() {
-        listener = new KpiEmailListener(kpiDefinitionRepository, userRepository, emailService);
+        listener = new KpiEmailListener(kpiDefinitionRepository, userRepository, emailService, kpiSubmissionRepository);
 
         Organization alpha = new Organization();
         alpha.setId(20L);
@@ -120,6 +125,90 @@ class KpiEmailListenerTest {
         assertThat(KpiEmailListener.formatTarget(100.0, "startups")).isEqualTo("100 startups");
         assertThat(KpiEmailListener.formatTarget(12.5, "%")).isEqualTo("12.5 %");
         assertThat(KpiEmailListener.formatTarget(5.0, null)).isEqualTo("5");
+    }
+
+    // ---- Submission emails ----
+
+    @Test
+    void submissionSent_emailsActiveLeadsOfTheCommittee() {
+        KpiSubmission submission = givenSubmission(SubmissionReviewStatus.PENDING);
+        User lead = user(1L, "lead@test.com", "TBI_MANAGER");
+        when(userRepository.findByRoleAndStatusAndCommittees_Id("TBI_MANAGER", "Active", 5L)).thenReturn(List.of(lead));
+
+        listener.onKpiEmailEvent(KpiEmailEvent.submissionSent(50L));
+
+        verify(emailService).sendSubmissionForReviewEmail("lead@test.com", "lead@test.com", "Startups Incubated",
+                "TBI Alpha", "member@gmail.com", "40 startups", submission.getReportingPeriod(),
+                submission.getSubmissionDate(), "SUB-0050");
+        verify(userRepository, never()).findByRoleAndStatusAndOrganizationIdIn(anyString(), anyString(), any());
+    }
+
+    @Test
+    void submissionReviewed_emailsTheSubmittingMemberWithTheReason() {
+        KpiSubmission submission = givenSubmission(SubmissionReviewStatus.REJECTED);
+        submission.setRejectionReason("Missing evidence");
+        submission.setReviewedBy(user(1L, "lead@test.com", "TBI_MANAGER"));
+
+        listener.onKpiEmailEvent(KpiEmailEvent.submissionReviewed(50L));
+
+        verify(emailService).sendSubmissionReviewedEmail("member@gmail.com", "member@gmail.com", "Startups Incubated",
+                "40 startups", "SUB-0050", false, "lead@test.com", "Missing evidence");
+    }
+
+    @Test
+    void submissionReviewed_skipsInactiveMember() {
+        KpiSubmission submission = givenSubmission(SubmissionReviewStatus.APPROVED);
+        submission.getSubmittedBy().setStatus("Inactive");
+
+        listener.onKpiEmailEvent(KpiEmailEvent.submissionReviewed(50L));
+
+        verifyNoInteractions(emailService);
+    }
+
+    @Test
+    void finalValueApproved_emailsActiveAdmins() {
+        KpiSubmission submission = givenSubmission(SubmissionReviewStatus.APPROVED);
+        submission.setReviewedBy(user(1L, "lead@test.com", "TBI_MANAGER"));
+        User admin = user(3L, "admin@gmail.com", "DASIG_ADMIN");
+        when(userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active")).thenReturn(List.of(admin));
+
+        listener.onKpiEmailEvent(KpiEmailEvent.finalValueApproved(50L));
+
+        verify(emailService).sendFinalValueApprovedEmail("admin@gmail.com", "admin@gmail.com", 10L, "Startups Incubated",
+                "Committee A", "TBI Alpha", "40 startups", submission.getReportingPeriod(), "lead@test.com");
+    }
+
+    @Test
+    void missingSubmission_sendsNothing() {
+        when(kpiSubmissionRepository.findById(99L)).thenReturn(Optional.empty());
+
+        listener.onKpiEmailEvent(KpiEmailEvent.submissionSent(99L));
+
+        verifyNoInteractions(emailService, userRepository);
+    }
+
+    private KpiSubmission givenSubmission(SubmissionReviewStatus status) {
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(10L);
+        kpi.setName("Startups Incubated");
+        kpi.setUnit("startups");
+        kpi.setCommittee(committee);
+        Organization organization = new Organization();
+        organization.setId(20L);
+        organization.setName("TBI Alpha");
+
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(50L);
+        submission.setKpiDefinition(kpi);
+        submission.setOrganization(organization);
+        submission.setSubmittedBy(user(2L, "member@gmail.com", "STAFF"));
+        submission.setSubmittedValue(40.0);
+        submission.setReportingPeriod("Due by Dec 15, 2026");
+        submission.setSubmissionDate(LocalDate.of(2026, 10, 20));
+        submission.setReferenceCode("SUB-0050");
+        submission.setReviewStatus(status);
+        when(kpiSubmissionRepository.findById(50L)).thenReturn(Optional.of(submission));
+        return submission;
     }
 
     private void givenKpi() {

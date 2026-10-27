@@ -211,7 +211,7 @@ public class EmailService {
 
         sendKpiEmail(recipientEmail, "DASIG Core - New KPI assigned: " + kpiName, "New KPI Assigned", userName,
                 "A new KPI has been assigned to your committee on the DASIG Core Platform.",
-                details, buildKpiUrl(role, kpiId));
+                details, "View KPI", buildKpiUrl(role, kpiId));
     }
 
     /** Tells a Committee Lead or Member that the Admin changed a KPI's deadline. Called by KpiEmailListener in the background. */
@@ -229,11 +229,71 @@ public class EmailService {
 
         sendKpiEmail(recipientEmail, "DASIG Core - KPI deadline updated: " + kpiName, "KPI Deadline Updated", userName,
                 "The deadline of a KPI assigned to your committee has been changed.",
-                details, buildKpiUrl(role, kpiId));
+                details, "View KPI", buildKpiUrl(role, kpiId));
+    }
+
+    // ---- Submission emails (UC-3.1, UC-3.3, UC-4.5) ----
+
+    /** Tells a Committee Lead that a Member submitted KPI progress that is waiting for review. */
+    public void sendSubmissionForReviewEmail(String recipientEmail, String userName, String kpiName,
+                                             String organizationName, String submittedBy, String value,
+                                             String reportingPeriod, LocalDate submissionDate, String referenceCode) {
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Organization", organizationName});
+        details.add(new String[]{"Submitted by", submittedBy});
+        details.add(new String[]{"Submitted value", value});
+        details.add(new String[]{"Reporting period", reportingPeriod});
+        details.add(new String[]{"Submission date", formatDate(submissionDate)});
+        details.add(new String[]{"Reference code", referenceCode});
+
+        sendKpiEmail(recipientEmail, "DASIG Core - KPI submission to review: " + kpiName, "KPI Submission to Review", userName,
+                "A Member submitted KPI progress that is waiting for your review.",
+                details, "Review Submission", frontendUrl + "/dashboard/tbi_manager/submission-history");
+    }
+
+    /** Tells the Member who submitted progress that the Committee Lead approved or rejected it. */
+    public void sendSubmissionReviewedEmail(String recipientEmail, String userName, String kpiName, String value,
+                                            String referenceCode, boolean approved, String reviewedBy,
+                                            String rejectionReason) {
+        String result = approved ? "Approved" : "Rejected";
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Submitted value", value});
+        details.add(new String[]{"Reference code", referenceCode});
+        details.add(new String[]{"Result", result});
+        details.add(new String[]{"Reviewed by", reviewedBy});
+        if (!approved && rejectionReason != null && !rejectionReason.isBlank()) {
+            details.add(new String[]{"Reason", rejectionReason});
+        }
+
+        String intro = approved
+                ? "Your KPI submission was approved and now counts toward your committee's official progress."
+                : "Your KPI submission was rejected. Please review the reason below and submit again if needed.";
+        sendKpiEmail(recipientEmail, "DASIG Core - Your KPI submission was " + result.toLowerCase() + ": " + kpiName,
+                "KPI Submission " + result, userName, intro,
+                details, "View Submission", frontendUrl + "/dashboard/staff/submission-history");
+    }
+
+    /** Tells an Admin that a final KPI value now counts toward official progress. */
+    public void sendFinalValueApprovedEmail(String recipientEmail, String userName, Long kpiId, String kpiName,
+                                            String committeeName, String organizationName, String value,
+                                            String reportingPeriod, String approvedBy) {
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Committee", committeeName});
+        details.add(new String[]{"Organization", organizationName});
+        details.add(new String[]{"Approved value", value});
+        details.add(new String[]{"Reporting period", reportingPeriod});
+        details.add(new String[]{"Approved by", approvedBy});
+
+        sendKpiEmail(recipientEmail, "DASIG Core - Final KPI value approved: " + kpiName, "Final KPI Value Approved", userName,
+                "A final KPI value was approved and now counts toward official progress.",
+                details, "View KPI", frontendUrl + "/dashboard/admin/kpis/" + kpiId);
     }
 
     private void sendKpiEmail(String recipientEmail, String subject, String title, String userName,
-                              String intro, List<String[]> details, String kpiUrl) {
+                              String intro, List<String[]> details, String buttonLabel, String kpiUrl) {
         String name = userName != null && !userName.isBlank() ? userName : "there";
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
@@ -242,8 +302,8 @@ public class EmailService {
             helper.setTo(recipientEmail);
             helper.setSubject(subject);
             helper.setText(
-                    buildKpiPlainText(name, intro, details, kpiUrl),
-                    buildKpiHtml(title, name, intro, details, kpiUrl)
+                    buildKpiPlainText(name, intro, details, buttonLabel, kpiUrl),
+                    buildKpiHtml(title, name, intro, details, buttonLabel, kpiUrl)
             );
 
             mailSender.send(mimeMessage);
@@ -264,18 +324,18 @@ public class EmailService {
         return date != null ? date.format(DATE_FORMAT) : "Not set";
     }
 
-    private String buildKpiPlainText(String userName, String intro, List<String[]> details, String kpiUrl) {
+    private String buildKpiPlainText(String userName, String intro, List<String[]> details, String buttonLabel, String kpiUrl) {
         StringBuilder text = new StringBuilder("Hello " + userName + ",\n\n" + intro + "\n\n");
         for (String[] detail : details) {
-            text.append(detail[0]).append(": ").append(detail[1]).append("\n");
+            text.append(detail[0]).append(": ").append(detail[1] != null ? detail[1] : "").append("\n");
         }
-        text.append("\nView this KPI here: ").append(kpiUrl).append("\n\n")
+        text.append("\n").append(buttonLabel).append(": ").append(kpiUrl).append("\n\n")
                 .append("Best regards,\n")
                 .append("DASIG System Management Team");
         return text.toString();
     }
 
-    private String buildKpiHtml(String title, String userName, String intro, List<String[]> details, String kpiUrl) {
+    private String buildKpiHtml(String title, String userName, String intro, List<String[]> details, String buttonLabel, String kpiUrl) {
         String safeUrl = HtmlUtils.htmlEscape(kpiUrl);
         StringBuilder rows = new StringBuilder();
         for (String[] detail : details) {
@@ -298,7 +358,7 @@ public class EmailService {
                 + rows
                 + "<div style=\"margin: 24px 0 20px;\">"
                 + "<a href=\"" + safeUrl + "\" style=\"background-color: #007bff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;\">"
-                + "View KPI"
+                + HtmlUtils.htmlEscape(buttonLabel)
                 + "</a>"
                 + "</div>"
                 + "<p style=\"font-size: 12px; color: #666666; margin-top: 10px;\">"

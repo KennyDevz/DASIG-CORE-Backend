@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpisubmission.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
@@ -233,6 +234,12 @@ public class KpiSubmissionService {
                 BigDecimal.valueOf(savedSubmission.getSubmittedValue())
         ));
 
+        // UC-4.5 emails, sent after the save commits: a Member's entry goes to the Leads for review;
+        // a Committee Lead's entry is final at once, so the Admins are told
+        eventPublisher.publishEvent(savedSubmission.getSubmissionType() == SubmissionType.INTERNAL
+                ? KpiEmailEvent.submissionSent(savedSubmission.getId())
+                : KpiEmailEvent.finalValueApproved(savedSubmission.getId()));
+
         return toResponse(savedSubmission);
     }
 
@@ -276,7 +283,10 @@ public class KpiSubmissionService {
                 throw new IllegalArgumentException("A rejection reason is required.");
             }
             submission.setRejectionReason(request.getRejectionReason().trim());
-            return toResponse(kpiSubmissionRepository.save(submission));
+            KpiSubmission rejectedSubmission = kpiSubmissionRepository.save(submission);
+            // UC-4.5: tell the Member their submission was rejected, with the reason
+            eventPublisher.publishEvent(KpiEmailEvent.submissionReviewed(rejectedSubmission.getId()));
+            return toResponse(rejectedSubmission);
         }
 
         submission.setRejectionReason(null);
@@ -301,6 +311,10 @@ public class KpiSubmissionService {
                 approvedSubmission.getId(),
                 BigDecimal.valueOf(approvedSubmission.getSubmittedValue())
         ));
+
+        // UC-4.5: tell the Member it was approved, and the Admins that a final value now counts
+        eventPublisher.publishEvent(KpiEmailEvent.submissionReviewed(approvedSubmission.getId()));
+        eventPublisher.publishEvent(KpiEmailEvent.finalValueApproved(approvedSubmission.getId()));
 
         return toResponse(approvedSubmission);
     }

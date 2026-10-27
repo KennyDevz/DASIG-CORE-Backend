@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.kpisubmission.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.core.event.KpiSubmittedEvent;
 import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
@@ -268,6 +269,9 @@ class KpiSubmissionServiceTest {
         assertThat(response.getSubmissionType()).isEqualTo(SubmissionType.INTERNAL);
         assertThat(response.getReviewStatus()).isEqualTo(SubmissionReviewStatus.PENDING);
         verify(eventPublisher).publishEvent(any(KpiSubmittedEvent.class));
+        // UC-4.5: the committee's Leads are emailed to review it
+        verify(eventPublisher).publishEvent(KpiEmailEvent.submissionSent(100L));
+        verify(eventPublisher, never()).publishEvent(KpiEmailEvent.finalValueApproved(100L));
     }
 
     @Test
@@ -299,6 +303,9 @@ class KpiSubmissionServiceTest {
 
         assertThat(response.getSubmissionType()).isEqualTo(SubmissionType.FINAL);
         assertThat(response.getReviewStatus()).isEqualTo(SubmissionReviewStatus.APPROVED);
+        // UC-4.5: a Lead's entry is final at once, so the Admins are emailed
+        verify(eventPublisher).publishEvent(KpiEmailEvent.finalValueApproved(101L));
+        verify(eventPublisher, never()).publishEvent(KpiEmailEvent.submissionSent(101L));
     }
 
     // ---- reviewSubmission ----
@@ -414,7 +421,10 @@ class KpiSubmissionServiceTest {
         assertThat(response.getReviewStatus()).isEqualTo(SubmissionReviewStatus.REJECTED);
         assertThat(response.getRejectionReason()).isEqualTo("Insufficient evidence");
         verify(kpiSubmissionRepository, never()).existsBySourceSubmissionId(any());
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(eventPublisher, never()).publishEvent(any(KpiSubmittedEvent.class));
+        // UC-4.5: only the Member is emailed (with the reason); no final value for the Admins
+        verify(eventPublisher).publishEvent(KpiEmailEvent.submissionReviewed(1L));
+        verify(eventPublisher, never()).publishEvent(KpiEmailEvent.finalValueApproved(1L));
     }
 
     @Test
@@ -441,6 +451,9 @@ class KpiSubmissionServiceTest {
         assertThat(submission.getSourceSubmission()).isNull();
         verify(kpiSubmissionRepository, never()).existsBySourceSubmissionId(any());
         verify(eventPublisher).publishEvent(any(KpiSubmittedEvent.class));
+        // UC-4.5: the Member is told it was approved and the Admins that a final value counts
+        verify(eventPublisher).publishEvent(KpiEmailEvent.submissionReviewed(1L));
+        verify(eventPublisher).publishEvent(KpiEmailEvent.finalValueApproved(1L));
     }
 
     @Test
