@@ -28,7 +28,7 @@ import java.util.Map;
 
 /**
  * Sends the KPI and submission emails of UC-4.5:
- * KPI assigned and deadline updated (committee Leads and Members), submission sent (committee Leads),
+ * KPI assigned, deadline updated and new At Risk / Overdue alerts (committee Leads and Members), submission sent (committee Leads),
  * submission reviewed (the submitting Member) and final value approved (Admins).
  * Runs in the background after the change is saved, so a slow or failed email never blocks or undoes the save.
  */
@@ -65,15 +65,18 @@ public class KpiEmailListener {
         }
 
         Committee committee = kpi.getCommittee();
+        String target = formatTarget(kpi.getTargetValue(), kpi.getUnit());
         for (User user : findRecipients(committee)) {
-            if (event.type() == KpiEmailType.KPI_ASSIGNED) {
-                emailService.sendKpiAssignedEmail(user.getEmail(), user.getName(), user.getRole(),
-                        kpi.getId(), kpi.getName(), committee.getName(),
-                        formatTarget(kpi.getTargetValue(), kpi.getUnit()), kpi.getDeadline());
-            } else {
-                emailService.sendKpiDeadlineUpdatedEmail(user.getEmail(), user.getName(), user.getRole(),
+            switch (event.type()) {
+                case KPI_ASSIGNED -> emailService.sendKpiAssignedEmail(user.getEmail(), user.getName(), user.getRole(),
+                        kpi.getId(), kpi.getName(), committee.getName(), target, kpi.getDeadline());
+                case DEADLINE_UPDATED -> emailService.sendKpiDeadlineUpdatedEmail(user.getEmail(), user.getName(), user.getRole(),
                         kpi.getId(), kpi.getName(), committee.getName(),
                         event.oldDeadline(), event.newDeadline(), event.adminRemark());
+                case KPI_AT_RISK, KPI_OVERDUE -> emailService.sendKpiAlertCommitteeEmail(user.getEmail(), user.getName(),
+                        user.getRole(), kpi.getName(), committee.getName(),
+                        event.type() == KpiEmailType.KPI_OVERDUE, target, kpi.getDeadline());
+                default -> log.warn("Unexpected KPI email type {}", event.type());
             }
         }
     }

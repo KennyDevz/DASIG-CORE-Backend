@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.core.smtp.EmailService;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -50,6 +52,8 @@ class KpiAlertEvaluatorServiceTest {
     private EmailService emailService;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private KpiAlertEvaluatorService evaluatorService;
 
@@ -62,7 +66,7 @@ class KpiAlertEvaluatorServiceTest {
     void setUp() {
         evaluatorService = new KpiAlertEvaluatorService(
                 kpiDefinitionRepository, kpiSubmissionRepository, alertRepository,
-                notificationService, emailService, userRepository);
+                notificationService, emailService, userRepository, eventPublisher);
         ReflectionTestUtils.setField(evaluatorService, "businessTimezone", "Asia/Manila");
     }
 
@@ -86,6 +90,8 @@ class KpiAlertEvaluatorServiceTest {
         verify(alertRepository).save(argThat(a ->
                 Alert.TYPE_AT_RISK.equals(a.getAlertType()) && Alert.SEVERITY_WARNING.equals(a.getSeverity())));
         verify(notificationService).notifyAlertCreated(any(), argThat(a -> Alert.TYPE_AT_RISK.equals(a.getAlertType())));
+        // UC-4.5: the committee's Leads and Members are emailed too
+        verify(eventPublisher).publishEvent(KpiEmailEvent.alertCreated(1L, Alert.TYPE_AT_RISK));
     }
 
     @Test
@@ -131,6 +137,7 @@ class KpiAlertEvaluatorServiceTest {
         verify(alertRepository).save(argThat(a ->
                 Alert.TYPE_OVERDUE.equals(a.getAlertType()) && Alert.SEVERITY_CRITICAL.equals(a.getSeverity())));
         verify(notificationService).notifyAlertCreated(any(), argThat(a -> Alert.TYPE_OVERDUE.equals(a.getAlertType())));
+        verify(eventPublisher).publishEvent(KpiEmailEvent.alertCreated(1L, Alert.TYPE_OVERDUE));
     }
 
     @Test
@@ -154,7 +161,7 @@ class KpiAlertEvaluatorServiceTest {
         evaluatorService.evaluateAllKpiAlerts();
 
         verify(alertRepository, never()).save(any());
-        verifyNoInteractions(notificationService);
+        verifyNoInteractions(notificationService, eventPublisher);
     }
 
     @Test

@@ -67,10 +67,13 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setFrom("Dasig Core Team <no-reply@dasig-core.site>");
             helper.setTo(recipientEmail);
-            helper.setSubject("DASIG Core - KPI Alert: " + alertType + " (" + severity + ")");
+            // Show "At Risk" / "Overdue" and "Warning" / "Critical" instead of the stored codes
+            String typeLabel = alertTypeLabel(alertType);
+            String severityLabel = severityLabel(severity);
+            helper.setSubject("DASIG Core - KPI Alert: " + typeLabel + " (" + severityLabel + ")");
             helper.setText(
-                    buildKpiAlertPlainText(userName, alertType, severity, kpiName, alertUrl),
-                    buildKpiAlertHtml(userName, alertType, severity, kpiName, alertUrl)
+                    buildKpiAlertPlainText(userName, typeLabel, severityLabel, kpiName, alertUrl),
+                    buildKpiAlertHtml(userName, typeLabel, severityLabel, kpiName, alertUrl)
             );
 
             mailSender.send(mimeMessage);
@@ -164,7 +167,7 @@ public class EmailService {
         String safeKpiName = HtmlUtils.htmlEscape(kpiName);
         String safeAlertUrl = HtmlUtils.htmlEscape(alertUrl);
 
-        String severityColor = "CRITICAL".equals(severity) ? "#dc2626" : "#f59e0b";
+        String severityColor = "Critical".equals(severity) ? "#dc2626" : "#f59e0b";
 
         return "<div style=\"font-family:Arial,Helvetica,sans-serif;background-color:#f4f5f7;padding:32px 0;\">"
                 + "<div style=\"max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;\">"
@@ -230,6 +233,49 @@ public class EmailService {
         sendKpiEmail(recipientEmail, "DASIG Core - KPI deadline updated: " + kpiName, "KPI Deadline Updated", userName,
                 "The deadline of a KPI assigned to your committee has been changed.",
                 details, "View KPI", buildKpiUrl(role, kpiId));
+    }
+
+    // ---- At Risk / Overdue email to the committee (UC-4.1, UC-4.5) ----
+
+    /** Tells a Committee Lead or Member that a KPI of their committee became At Risk or Overdue. */
+    public void sendKpiAlertCommitteeEmail(String recipientEmail, String userName, String role, String kpiName,
+                                           String committeeName, boolean overdue, String target, LocalDate deadline) {
+        String status = overdue ? "Overdue" : "At Risk";
+        List<String[]> details = new ArrayList<>();
+        details.add(new String[]{"KPI", kpiName});
+        details.add(new String[]{"Committee", committeeName});
+        details.add(new String[]{"Status", status});
+        details.add(new String[]{"Target", target});
+        details.add(new String[]{"Deadline", formatDate(deadline)});
+
+        String intro = overdue
+                ? "The deadline of a KPI assigned to your committee has passed without meeting the target."
+                : "A KPI assigned to your committee is behind its expected pace for the deadline.";
+        String dashboard = "TBI_MANAGER".equals(role) ? "tbi_manager" : "staff";
+        sendKpiEmail(recipientEmail, "DASIG Core - KPI " + status + ": " + kpiName, "KPI " + status, userName, intro,
+                details, "View Notifications", frontendUrl + "/dashboard/" + dashboard + "/notifications");
+    }
+
+    /** "At Risk" / "Overdue" for the stored alert type codes. */
+    private String alertTypeLabel(String alertType) {
+        if ("AT_RISK".equals(alertType)) {
+            return "At Risk";
+        }
+        if ("OVERDUE".equals(alertType)) {
+            return "Overdue";
+        }
+        return alertType;
+    }
+
+    /** "Warning" / "Critical" for the stored severity codes. */
+    private String severityLabel(String severity) {
+        if ("WARNING".equals(severity)) {
+            return "Warning";
+        }
+        if ("CRITICAL".equals(severity)) {
+            return "Critical";
+        }
+        return severity;
     }
 
     // ---- Submission emails (UC-3.1, UC-3.3, UC-4.5) ----
