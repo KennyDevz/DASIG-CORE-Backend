@@ -1,5 +1,6 @@
 package edu.cit.dasig_core.features.alert.service;
 
+import edu.cit.dasig_core.core.event.KpiEmailEvent;
 import edu.cit.dasig_core.core.smtp.EmailService;
 import edu.cit.dasig_core.features.alert.model.Alert;
 import edu.cit.dasig_core.features.alert.repository.AlertRepository;
@@ -15,6 +16,7 @@ import edu.cit.dasig_core.features.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +48,7 @@ public class KpiAlertEvaluatorService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${app.business-timezone:Asia/Manila}")
     private String businessTimezone;
@@ -116,6 +119,9 @@ public class KpiAlertEvaluatorService {
         log.info("Created {} alert for KPI: {}", type, kpi.getName());
 
         notificationService.notifyAlertCreated(kpi, alert);
+
+        // UC-4.5: email the committee's Leads and Members after the alert is saved
+        eventPublisher.publishEvent(KpiEmailEvent.alertCreated(kpi.getId(), type));
 
         // Dispatch email notifications to all active DASIG_ADMIN users
         List<User> activeAdmins = userRepository.findByRoleAndStatus("DASIG_ADMIN", "Active");

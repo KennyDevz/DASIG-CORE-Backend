@@ -68,6 +68,38 @@ class EmailServiceTest {
     }
 
     @Test
+    void kpiAlertEmail_showsReadableAlertTypeAndSeverity() throws Exception {
+        emailService.sendKpiAlertEmail(
+                "admin@dasig-core.site", "Admin", "AT_RISK", "WARNING", "Graduate Employment Rate", 42L);
+
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - KPI Alert: At Risk (Warning)");
+        assertThat(htmlBody()).contains("At Risk", "Warning").doesNotContain("AT_RISK");
+        assertThat(plainTextBody()).contains("Alert Type: At Risk").doesNotContain("AT_RISK");
+    }
+
+    @Test
+    void kpiAlertCommitteeEmail_overdueLinksLeadToNotifications() throws Exception {
+        emailService.sendKpiAlertCommitteeEmail("lead@test.com", "Lead", "TBI_MANAGER", "Startups Incubated",
+                "Committee A", true, "100 startups", LocalDate.of(2026, 10, 1));
+
+        String html = htmlBody();
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - KPI Overdue: Startups Incubated");
+        assertThat(html).contains("Overdue", "Committee A", "100 startups", "Oct 01, 2026");
+        assertThat(html).contains("href=\"" + FRONTEND_URL + "/dashboard/tbi_manager/notifications\"");
+        assertThat(html).contains(">View Notifications</a>");
+    }
+
+    @Test
+    void kpiAlertCommitteeEmail_atRiskLinksMemberToNotifications() throws Exception {
+        emailService.sendKpiAlertCommitteeEmail("member@gmail.com", "Member", "STAFF", "Startups Incubated",
+                "Committee A", false, "100 startups", LocalDate.of(2026, 12, 15));
+
+        assertThat(mimeMessage.getSubject()).isEqualTo("DASIG Core - KPI At Risk: Startups Incubated");
+        assertThat(htmlBody()).contains("behind its expected pace")
+                .contains("href=\"" + FRONTEND_URL + "/dashboard/staff/notifications\"");
+    }
+
+    @Test
     void kpiAlertEmail_withoutAlertId_linksToAlertsPage() throws Exception {
         emailService.sendKpiAlertEmail(
                 "admin@dasig-core.site", "Admin", "AT_RISK", "WARNING", "Graduate Employment Rate", null);

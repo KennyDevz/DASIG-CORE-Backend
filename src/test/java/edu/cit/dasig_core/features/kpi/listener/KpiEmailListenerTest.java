@@ -127,6 +127,34 @@ class KpiEmailListenerTest {
         assertThat(KpiEmailListener.formatTarget(5.0, null)).isEqualTo("5");
     }
 
+    @Test
+    void kpiAtRisk_emailsActiveLeadsAndMembersOfTheCommittee() {
+        givenKpi();
+        User lead = user(1L, "lead@test.com", "TBI_MANAGER");
+        User member = user(2L, "member@gmail.com", "STAFF");
+        when(userRepository.findByRoleAndStatusAndCommittees_Id("TBI_MANAGER", "Active", 5L)).thenReturn(List.of(lead));
+        when(userRepository.findByRoleAndStatusAndOrganizationIdIn("STAFF", "Active", List.of(20L, 21L))).thenReturn(List.of(member));
+
+        listener.onKpiEmailEvent(KpiEmailEvent.alertCreated(10L, "AT_RISK"));
+
+        verify(emailService).sendKpiAlertCommitteeEmail("lead@test.com", "lead@test.com", "TBI_MANAGER",
+                "Startups Incubated", "Committee A", false, "100 startups", DEADLINE);
+        verify(emailService).sendKpiAlertCommitteeEmail("member@gmail.com", "member@gmail.com", "STAFF",
+                "Startups Incubated", "Committee A", false, "100 startups", DEADLINE);
+    }
+
+    @Test
+    void kpiOverdue_marksTheEmailAsOverdue() {
+        givenKpi();
+        User member = user(2L, "member@gmail.com", "STAFF");
+        when(userRepository.findByRoleAndStatusAndOrganizationIdIn("STAFF", "Active", List.of(20L, 21L))).thenReturn(List.of(member));
+
+        listener.onKpiEmailEvent(KpiEmailEvent.alertCreated(10L, "OVERDUE"));
+
+        verify(emailService).sendKpiAlertCommitteeEmail("member@gmail.com", "member@gmail.com", "STAFF",
+                "Startups Incubated", "Committee A", true, "100 startups", DEADLINE);
+    }
+
     // ---- Submission emails ----
 
     @Test

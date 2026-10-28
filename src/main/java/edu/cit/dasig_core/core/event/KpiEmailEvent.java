@@ -24,6 +24,12 @@ public record KpiEmailEvent(
         return new KpiEmailEvent(KpiEmailType.DEADLINE_UPDATED, kpiDefinitionId, oldDeadline, newDeadline, adminRemark, null);
     }
 
+    /** A new At Risk or Overdue alert ({@code alertType} is "AT_RISK" or "OVERDUE") for the KPI's committee. */
+    public static KpiEmailEvent alertCreated(Long kpiDefinitionId, String alertType) {
+        KpiEmailType type = "OVERDUE".equals(alertType) ? KpiEmailType.KPI_OVERDUE : KpiEmailType.KPI_AT_RISK;
+        return new KpiEmailEvent(type, kpiDefinitionId, null, null, null, null);
+    }
+
     public static KpiEmailEvent submissionSent(Long submissionId) {
         return new KpiEmailEvent(KpiEmailType.SUBMISSION_SENT, null, null, null, null, submissionId);
     }

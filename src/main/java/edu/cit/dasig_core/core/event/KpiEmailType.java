@@ -6,6 +6,10 @@ public enum KpiEmailType {
     KPI_ASSIGNED,
     /** KPI deadline changed: emails the committee's Leads and Members. */
     DEADLINE_UPDATED,
+    /** New At Risk alert: emails the committee's Leads and Members (Admins get the alert email). */
+    KPI_AT_RISK,
+    /** New Overdue alert: emails the committee's Leads and Members (Admins get the alert email). */
+    KPI_OVERDUE,
     /** Member submitted progress: emails the committee's Leads for review. */
     SUBMISSION_SENT,
     /** Lead approved or rejected a Member's submission: emails that Member. */
