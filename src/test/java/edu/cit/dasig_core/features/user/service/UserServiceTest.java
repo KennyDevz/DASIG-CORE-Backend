@@ -267,7 +267,42 @@ class UserServiceTest {
         verify(committeeRepository).findAllById(List.of(5L));
     }
 
+    @Test
+    void modifyUser_throwsWhenAdminUpdatesSelf() {
+        User user = existingUser(1L, "admin@example.com", "hash");
+        user.setRole("DASIG_ADMIN");
+        authenticateAs("admin@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(user));
+
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setName("Self Updated");
+        request.setEmail("admin@example.com");
+        request.setRole("DASIG_ADMIN");
+
+        assertThatThrownBy(() -> userService.modifyUser(1L, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Self deactivation and account update is disabled.");
+
+        verify(userRepository, never()).save(any());
+    }
+
     // ---- deactivateAccount ----
+
+    @Test
+    void deactivateAccount_throwsWhenAdminDeactivatesSelf() {
+        User user = existingUser(1L, "admin@example.com", "hash");
+        user.setRole("DASIG_ADMIN");
+        authenticateAs("admin@example.com");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.deactivateAccount(1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Self deactivation and account update is disabled.");
+
+        verify(userRepository, never()).save(any());
+    }
 
     @Test
     void deactivateAccount_throwsWhenUserNotFound() {
