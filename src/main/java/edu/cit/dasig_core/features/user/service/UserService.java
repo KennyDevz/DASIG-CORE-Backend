@@ -73,6 +73,8 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
 
+        validateNotSelfOperation(id);
+
         // Ensure the new email isn't taken by someone else
         if (userRepository.existsByEmailAndIdNot(request.getEmail(), id)) {
             throw new IllegalArgumentException("Email is already in use by another account.");
@@ -100,6 +102,8 @@ public class UserService {
     public void deactivateAccount(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + id));
+
+        validateNotSelfOperation(id);
         
         // SRS UC-1.1.4: Soft delete by flagging account as inactive
         user.setStatus("Inactive");
@@ -130,6 +134,17 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         user.setMustChangePassword(false);
         userRepository.save(user);
+    }
+
+    private void validateNotSelfOperation(Long targetUserId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()) {
+            userRepository.findByEmail(authentication.getName()).ifPresent(currentUser -> {
+                if (currentUser.getId().equals(targetUserId)) {
+                    throw new IllegalArgumentException("Self deactivation and account update is disabled.");
+                }
+            });
+        }
     }
 
     private User resolveCurrentUser() {
