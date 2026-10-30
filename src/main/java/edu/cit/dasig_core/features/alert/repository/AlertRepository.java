@@ -35,4 +35,10 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
 
     /** Alerts in one status, newest first (used by the Alerts page status filter). */
     List<Alert> findByStatusOrderByDetectedAtDesc(String status);
-}
+
+    /** Every alert in the given statuses, e.g. all open alerts (one query for the whole evaluation). */
+    List<Alert> findByStatusIn(Collection<String> statuses);
+
+    /** Number of alerts in one status (sidebar badge). */
+    long countByStatus(String status);
+}

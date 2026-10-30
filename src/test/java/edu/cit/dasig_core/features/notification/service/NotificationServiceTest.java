@@ -128,7 +128,7 @@ class NotificationServiceTest {
         notification.setAlertId(7L);
 
         when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
-        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(kpiWithDeadline(LocalDate.now())));
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(kpiWithDeadline(LocalDate.now())));
 
         List<NotificationResponse> result = notificationService.getAllNotifications();
 
@@ -149,7 +149,6 @@ class NotificationServiceTest {
         notification.setOrganizationId(9L);
 
         when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
-        when(kpiDefinitionRepository.findById(99L)).thenReturn(Optional.empty());
 
         List<NotificationResponse> result = notificationService.getAllNotifications();
 
@@ -172,12 +171,22 @@ class NotificationServiceTest {
         archivedKpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
 
         when(notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(9L)).thenReturn(List.of(notification));
-        when(kpiDefinitionRepository.findById(1L)).thenReturn(Optional.of(archivedKpi));
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(archivedKpi));
 
         List<NotificationResponse> result = notificationService.getAllNotifications();
 
         assertThat(result).isEmpty();
         verify(notificationRepository).delete(notification);
+    }
+
+    @Test
+    void countUnreadNotifications_countsForUserOrganization() {
+        User staff = staffUser(9L);
+        authenticateAs("staff@example.com");
+        when(userRepository.findByEmail("staff@example.com")).thenReturn(Optional.of(staff));
+        when(notificationRepository.countUnreadByOrganizationId(9L)).thenReturn(2L);
+
+        assertThat(notificationService.countUnreadNotifications()).isEqualTo(2L);
     }
 
     // ---- getNotificationById / markAsRead ----

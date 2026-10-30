@@ -35,6 +35,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class KpiSubmissionService {
@@ -115,7 +117,7 @@ public class KpiSubmissionService {
             submissions = kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(user.getOrganizationId());
         }
 
-        return submissions.stream()
+        List<KpiSubmission> visible = submissions.stream()
                 .filter(submission -> matchesRoleVisibility(user, submission, submissionType))
                 .filter(submission -> kpiDefinitionId == null
                         || submission.getKpiDefinition().getId().equals(kpiDefinitionId))
@@ -125,7 +127,17 @@ public class KpiSubmissionService {
                         || submission.getSubmissionType() == submissionType)
                 .filter(submission -> reviewStatus == null
                         || submission.getReviewStatus() == reviewStatus)
-                .map(this::toResponse)
+                .toList();
+
+        // Load the documents of every listed submission in one query instead of one per submission
+        Map<Long, List<SubmissionDocument>> documentsBySubmission = visible.isEmpty()
+                ? Map.of()
+                : submissionDocumentRepository.findBySubmissionIdIn(visible.stream().map(KpiSubmission::getId).toList())
+                        .stream()
+                        .collect(Collectors.groupingBy(document -> document.getSubmission().getId()));
+
+        return visible.stream()
+                .map(submission -> toResponse(submission, documentsBySubmission.getOrDefault(submission.getId(), List.of())))
                 .toList();
     }
 
@@ -378,6 +390,10 @@ public class KpiSubmissionService {
     }
 
     private KpiSubmissionResponse toResponse(KpiSubmission submission) {
+        return toResponse(submission, submissionDocumentRepository.findBySubmissionId(submission.getId()));
+    }
+
+    private KpiSubmissionResponse toResponse(KpiSubmission submission, List<SubmissionDocument> documents) {
         KpiSubmissionResponse response = new KpiSubmissionResponse();
         response.setId(submission.getId());
         response.setKpiDefinitionId(submission.getKpiDefinition().getId());
@@ -403,8 +419,7 @@ public class KpiSubmissionService {
             response.setOrganizationId(submission.getOrganization().getId());
             response.setOrganizationName(submission.getOrganization().getName());
         }
-        response.setDocuments(submissionDocumentRepository.findBySubmissionId(submission.getId())
-                .stream()
+        response.setDocuments(documents.stream()
                 .map(this::toDocumentResponse)
                 .toList());
         return response;

@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -125,8 +126,21 @@ public class ReportService {
     }
 
     public List<ReportResponse> getAllReports() {
-        return reportRepository.findAllByOrderByGeneratedAtDesc()
-                .stream().map(this::mapToResponse).toList();
+        List<Report> reports = reportRepository.findAllByOrderByGeneratedAtDesc();
+
+        // Committee and KPI names in two queries instead of two per report
+        Map<Long, String> committeeNames = committeeRepository
+                .findAllById(reports.stream().map(Report::getCommitteeId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(Committee::getId, Committee::getName));
+        Map<Long, String> kpiNames = kpiDefinitionRepository
+                .findAllById(reports.stream().map(Report::getKpiDefinitionId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(KpiDefinition::getId, KpiDefinition::getName));
+
+        return reports.stream()
+                .map(report -> mapToResponse(report,
+                        committeeNames.get(report.getCommitteeId()),
+                        kpiNames.get(report.getKpiDefinitionId())))
+                .toList();
     }
 
     public byte[] exportAsPdf(String reportId) {
@@ -793,19 +807,23 @@ public class ReportService {
     }
 
     private ReportResponse mapToResponse(Report report) {
+        String committeeName = committeeRepository.findById(report.getCommitteeId())
+                .map(Committee::getName)
+                .orElse(null);
+        String kpiName = report.getKpiDefinitionId() != null
+                ? kpiDefinitionRepository.findById(report.getKpiDefinitionId()).map(KpiDefinition::getName).orElse(null)
+                : null;
+        return mapToResponse(report, committeeName, kpiName);
+    }
+
+    private ReportResponse mapToResponse(Report report, String committeeName, String kpiName) {
         ReportResponse response = new ReportResponse();
         response.setId(report.getId());
         response.setCommitteeId(report.getCommitteeId());
-        response.setCommitteeName(committeeRepository.findById(report.getCommitteeId())
-                .map(Committee::getName)
-                .orElse(null));
+        response.setCommitteeName(committeeName);
         response.setReportType(report.getReportType());
         response.setKpiDefinitionId(report.getKpiDefinitionId());
-        if (report.getKpiDefinitionId() != null) {
-            response.setKpiName(kpiDefinitionRepository.findById(report.getKpiDefinitionId())
-                    .map(KpiDefinition::getName)
-                    .orElse(null));
-        }
+        response.setKpiName(kpiName);
         response.setPeriodFrom(report.getPeriodFrom());
         response.setPeriodTo(report.getPeriodTo());
         response.setNarrativeText(report.getNarrativeText());

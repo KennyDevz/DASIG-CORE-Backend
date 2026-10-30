@@ -24,6 +24,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,6 +103,42 @@ class AlertServiceTest {
     }
 
     @Test
+    void getAllAlertDetails_evaluatesThenReturnsDetailsWithApprovedTotal() {
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("DASIG_ADMIN")));
+        when(alertRepository.findAllByOrderByDetectedAtDesc()).thenReturn(List.of(alert(Alert.STATUS_UNACKNOWLEDGED)));
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(kpi()));
+        when(kpiAlertEvaluatorService.approvedTotals(any())).thenReturn(Map.of(2L, 40.0));
+
+        List<AlertDetailResponse> details = alertService.getAllAlertDetails();
+
+        verify(kpiAlertEvaluatorService).evaluateAllKpiAlerts();
+        assertThat(details).hasSize(1);
+        assertThat(details.get(0).getKpiName()).isEqualTo("KPI");
+        assertThat(details.get(0).getCumulativeValue()).isEqualTo(40.0);
+        assertThat(details.get(0).getExplanationStatus()).isEqualTo(OverdueExplanationService.STATUS_AWAITING);
+    }
+
+    @Test
+    void getAllAlertDetails_skipsAlertsWhoseKpiWasDeleted() {
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("DASIG_ADMIN")));
+        when(alertRepository.findAllByOrderByDetectedAtDesc()).thenReturn(List.of(alert(Alert.STATUS_UNACKNOWLEDGED)));
+
+        assertThat(alertService.getAllAlertDetails()).isEmpty();
+    }
+
+    @Test
+    void countUnacknowledgedAlerts_countsWithoutEvaluating() {
+        authenticateAs("user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("DASIG_ADMIN")));
+        when(alertRepository.countByStatus(Alert.STATUS_UNACKNOWLEDGED)).thenReturn(3L);
+
+        assertThat(alertService.countUnacknowledgedAlerts()).isEqualTo(3L);
+        verify(kpiAlertEvaluatorService, never()).evaluateAllKpiAlerts();
+    }
+
+    @Test
     void getAlertById_throwsWhenAlertNotFound() {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("DASIG_ADMIN")));
@@ -142,13 +179,13 @@ class AlertServiceTest {
         User admin = user("DASIG_ADMIN");
         admin.setName("Admin User");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(admin));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findAllById(any())).thenReturn(List.of(admin));
 
         Alert alert = alert(Alert.STATUS_UNACKNOWLEDGED);
         when(alertRepository.findById(1L)).thenReturn(Optional.of(alert));
         when(alertRepository.save(any(Alert.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(kpi()));
         when(kpiDefinitionRepository.findById(2L)).thenReturn(Optional.of(kpi()));
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(any(), any())).thenReturn(List.of());
 
         AlertDetailResponse response = alertService.acknowledgeAlert(1L, "  Will follow up with the committee.  ");
 
@@ -170,8 +207,7 @@ class AlertServiceTest {
         Alert alert = alert(Alert.STATUS_RESOLVED);
         alert.setResolutionReason("Target met");
         when(alertRepository.findById(1L)).thenReturn(Optional.of(alert));
-        when(kpiDefinitionRepository.findById(2L)).thenReturn(Optional.of(kpi()));
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(any(), any())).thenReturn(List.of());
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(kpi()));
 
         AlertDetailResponse response = alertService.getAlertById(1L);
 
@@ -185,18 +221,17 @@ class AlertServiceTest {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user("DASIG_ADMIN")));
 
         when(alertRepository.findById(1L)).thenReturn(Optional.of(alert(Alert.STATUS_UNACKNOWLEDGED)));
-        when(kpiDefinitionRepository.findById(2L)).thenReturn(Optional.of(kpi()));
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(any(), any())).thenReturn(List.of());
+        when(kpiDefinitionRepository.findAllById(any())).thenReturn(List.of(kpi()));
 
         OverdueExplanation explanation = new OverdueExplanation();
         explanation.setAlertId(1L);
         explanation.setExplanation("Two member organizations joined late.");
         explanation.setAuthorId(5L);
         User lead = user("TBI_MANAGER");
+        lead.setId(5L);
         lead.setName("Committee Lead");
-        when(overdueExplanationRepository.existsByAlertId(1L)).thenReturn(true);
-        when(overdueExplanationRepository.findByAlertId(1L)).thenReturn(Optional.of(explanation));
-        when(userRepository.findById(5L)).thenReturn(Optional.of(lead));
+        when(overdueExplanationRepository.findByAlertIdIn(any())).thenReturn(List.of(explanation));
+        when(userRepository.findAllById(any())).thenReturn(List.of(lead));
 
         AlertDetailResponse response = alertService.getAlertById(1L);
 

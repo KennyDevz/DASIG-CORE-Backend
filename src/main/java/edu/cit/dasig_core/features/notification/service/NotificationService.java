@@ -26,7 +26,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -54,15 +56,19 @@ public class NotificationService {
         List<Notification> notifications =
                 notificationRepository.findByOrganizationIdOrderByCreatedAtDesc(user.getOrganizationId());
 
+        // Load every KPI the notifications refer to in one query
+        Set<Long> kpiIds = notifications.stream().map(Notification::getKpiDefinitionId).collect(Collectors.toSet());
+        Map<Long, KpiDefinition> kpis = kpiDefinitionRepository.findAllById(kpiIds).stream()
+                .collect(Collectors.toMap(KpiDefinition::getId, kpi -> kpi));
+
         List<NotificationResponse> responses = new ArrayList<>();
         for (Notification notification : notifications) {
-            Optional<KpiDefinition> kpiOpt = kpiDefinitionRepository.findById(notification.getKpiDefinitionId());
-            if (kpiOpt.isEmpty()) {
+            KpiDefinition kpi = kpis.get(notification.getKpiDefinitionId());
+            if (kpi == null) {
                 // Self-healing: Clean up orphaned notification whose KPI was deleted
                 notificationRepository.delete(notification);
                 continue;
             }
-            KpiDefinition kpi = kpiOpt.get();
             if (kpi.isArchived()) {
                 // Suppress notifications for archived KPIs
                 notificationRepository.delete(notification);
@@ -71,6 +77,15 @@ public class NotificationService {
             responses.add(toResponse(notification, kpi));
         }
         return responses;
+    }
+
+    /** Unread notifications for the user's organization (sidebar badge), counted in one query. */
+    @Transactional(readOnly = true)
+    public long countUnreadNotifications() {
+        User user = resolveCurrentUser();
+        validateNotificationViewerRole(user);
+
+        return notificationRepository.countUnreadByOrganizationId(user.getOrganizationId());
     }
 
     @Transactional(readOnly = true)

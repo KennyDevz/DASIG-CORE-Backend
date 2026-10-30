@@ -127,7 +127,7 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(admin));
         when(kpiDefinitionRepository.findAll()).thenReturn(List.of(kpi(1L, 5L), kpi(2L, 6L)));
-        when(kpiSubmissionRepository.findByKpiDefinitionId(any())).thenReturn(List.of());
+        when(kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(any(), any())).thenReturn(List.of());
 
         DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 
@@ -148,7 +148,7 @@ class DashboardServiceTest {
         archivedKpi.setStatus(KpiDefinition.STATUS_ARCHIVED);
 
         when(kpiDefinitionRepository.findAll()).thenReturn(List.of(activeKpi, archivedKpi));
-        when(kpiSubmissionRepository.findByKpiDefinitionId(any())).thenReturn(List.of());
+        when(kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(any(), any())).thenReturn(List.of());
 
         DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 
@@ -166,8 +166,7 @@ class DashboardServiceTest {
         authenticateAs("user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(staff));
         when(kpiDefinitionRepository.findByCommittee_Organizations_Id(9L)).thenReturn(List.of(kpi(1L, 5L)));
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(any(), any(), any()))
-                .thenReturn(List.of());
+        when(kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(any(), any())).thenReturn(List.of());
         when(organizationRepository.findById(9L)).thenReturn(Optional.empty());
 
         DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
@@ -297,7 +296,8 @@ class DashboardServiceTest {
         legacySubmission.setSubmissionDate(LocalDate.of(2026, 8, 20));
 
         when(kpiDefinitionRepository.findAll()).thenReturn(List.of(oneTimeKpi));
-        when(kpiSubmissionRepository.findByKpiDefinitionId(10L)).thenReturn(List.of(legacySubmission));
+        when(kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(any(), any()))
+                .thenReturn(List.of(legacySubmission));
 
         DashboardResponse response = dashboardService.getDashboardForCurrentUser(null, null);
 

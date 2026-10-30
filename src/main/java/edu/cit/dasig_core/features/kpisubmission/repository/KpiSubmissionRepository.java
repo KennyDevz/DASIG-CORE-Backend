@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -16,6 +17,9 @@ public interface KpiSubmissionRepository extends JpaRepository<KpiSubmission, Lo
     List<KpiSubmission> findByKpiDefinitionId(Long kpiDefinitionId);
 
     List<KpiSubmission> findByKpiDefinitionIdAndSubmissionType(Long kpiDefinitionId, SubmissionType submissionType);
+
+    /** Submissions of one type for several KPIs at once (dashboard and alert checks). */
+    List<KpiSubmission> findByKpiDefinitionIdInAndSubmissionType(Collection<Long> kpiDefinitionIds, SubmissionType submissionType);
 
     List<KpiSubmission> findByKpiDefinitionIdAndOrganizationId(Long kpiDefinitionId, Long organizationId);
 
