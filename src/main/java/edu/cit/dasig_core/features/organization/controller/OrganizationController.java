@@ -14,7 +14,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/organizations")
-@PreAuthorize("hasRole('DASIG_ADMIN')") // Secures all endpoints for Admins only
 public class OrganizationController {
 
     private final OrganizationService organizationService;
@@ -24,24 +23,28 @@ public class OrganizationController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
     public ResponseEntity<OrganizationResponse> createOrganization(@Valid @RequestBody CreateOrganizationRequest request) {
         OrganizationResponse response = organizationService.createOrganization(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED); // 201 Created
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
     public ResponseEntity<List<OrganizationResponse>> getAllOrganizations() {
         List<OrganizationResponse> responses = organizationService.getAllOrganizations();
         return ResponseEntity.ok(responses); // 200 OK
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<OrganizationResponse> getOrganizationById(@PathVariable Long id) {
         OrganizationResponse response = organizationService.getOrganizationById(id);
         return ResponseEntity.ok(response); // 200 OK
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
     public ResponseEntity<OrganizationResponse> updateOrganization(
             @PathVariable Long id, 
             @Valid @RequestBody UpdateOrganizationRequest request) {
@@ -50,12 +53,14 @@ public class OrganizationController {
     }
 
     @PatchMapping("/{id}/deactivate")
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
     public ResponseEntity<Void> deactivateOrganization(@PathVariable Long id) {
         organizationService.deactivateOrganization(id);
         return ResponseEntity.noContent().build(); // 204 No Content
     }
 
     @PatchMapping("/{id}/activate")
+    @PreAuthorize("hasRole('DASIG_ADMIN')")
     public ResponseEntity<Void> activateOrganization(@PathVariable Long id) {
         organizationService.activateOrganization(id);
         return ResponseEntity.noContent().build(); // 204 No Content
