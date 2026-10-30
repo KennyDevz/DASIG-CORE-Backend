@@ -23,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Creates and resolves KPI alerts (UC-4.1).
@@ -60,18 +63,29 @@ public class KpiAlertEvaluatorService {
     @Transactional
     public void evaluateAllKpiAlerts() {
         LocalDate today = today();
-        for (KpiDefinition kpi : kpiDefinitionRepository.findAll()) {
-            if (kpi.getDeadline() != null && !kpi.isArchived()) {
-                evaluateKpi(kpi, today);
-            }
+        List<KpiDefinition> kpis = kpiDefinitionRepository.findAll().stream()
+                .filter(kpi -> kpi.getDeadline() != null && !kpi.isArchived())
+                .toList();
+        if (kpis.isEmpty()) {
+            return;
+        }
+
+        // Load totals and open alerts for every KPI in two queries instead of two per KPI
+        Map<Long, Double> totals = approvedTotals(kpis.stream().map(KpiDefinition::getId).toList());
+        Map<Long, List<Alert>> openAlertsByKpi = alertRepository.findByStatusIn(OPEN_STATUSES).stream()
+                .filter(alert -> alert.getKpiDefinitionId() != null)
+                .collect(Collectors.groupingBy(Alert::getKpiDefinitionId));
+
+        for (KpiDefinition kpi : kpis) {
+            evaluateKpi(kpi, today,
+                    totals.getOrDefault(kpi.getId(), 0.0),
+                    openAlertsByKpi.getOrDefault(kpi.getId(), List.of()));
         }
     }
 
-    private void evaluateKpi(KpiDefinition kpi, LocalDate today) {
-        double actual = approvedTotal(kpi);
+    private void evaluateKpi(KpiDefinition kpi, LocalDate today, double actual, List<Alert> openAlerts) {
         double target = kpi.getTargetValue() != null ? kpi.getTargetValue() : 0.0;
         boolean deadlinePassed = today.isAfter(kpi.getDeadline());
-        List<Alert> openAlerts = alertRepository.findByKpiDefinitionIdAndStatusIn(kpi.getId(), OPEN_STATUSES);
 
         if (target > 0 && actual >= target) {
             // 1. Target met -> close every open alert
@@ -90,13 +104,20 @@ public class KpiAlertEvaluatorService {
         }
     }
 
-    /** Sum of approved FINAL submissions from all organizations under the KPI's committee. */
-    private double approvedTotal(KpiDefinition kpi) {
-        return kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(kpi.getId(), SubmissionType.FINAL)
+    /**
+     * Sum of approved FINAL submissions per KPI (all organizations under the KPI's committee).
+     * KPIs without approved submissions are left out of the map (treat as 0).
+     */
+    public Map<Long, Double> approvedTotals(Collection<Long> kpiIds) {
+        if (kpiIds.isEmpty()) {
+            return Map.of();
+        }
+        return kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(kpiIds, SubmissionType.FINAL)
                 .stream()
                 .filter(s -> s.getReviewStatus() == null || s.getReviewStatus() == SubmissionReviewStatus.APPROVED)
-                .mapToDouble(s -> s.getSubmittedValue() != null ? s.getSubmittedValue() : 0.0)
-                .sum();
+                .collect(Collectors.groupingBy(
+                        s -> s.getKpiDefinition().getId(),
+                        Collectors.summingDouble(s -> s.getSubmittedValue() != null ? s.getSubmittedValue() : 0.0)));
     }
 
     private LocalDate startDate(KpiDefinition kpi) {

@@ -59,8 +59,13 @@ public class DashboardService {
         response.setCommitteeName(resolveCommitteeName(user, committeeId));
         response.setReportingPeriod(reportingPeriod);
         response.setCommittees(resolveCommitteeOptions(user, committeeId));
+
+        // One query for the submissions of every visible KPI instead of one query per KPI
+        Map<Long, List<KpiSubmission>> submissionsByKpi = loadSubmissionsByKpi(
+                visibleKpis, resolveSubmissionTypeForDashboard(user.getRole()));
         response.setKpis(visibleKpis.stream()
-                .map(kpi -> toDashboardKpiItem(kpi, user, reportingPeriod))
+                .map(kpi -> toDashboardKpiItem(kpi, user, reportingPeriod,
+                        submissionsByKpi.getOrDefault(kpi.getId(), List.of())))
                 .toList());
 
         return response;
@@ -332,12 +337,22 @@ public class DashboardService {
         return null;
     }
 
+    private Map<Long, List<KpiSubmission>> loadSubmissionsByKpi(List<KpiDefinition> kpis, SubmissionType submissionType) {
+        if (kpis.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> kpiIds = kpis.stream().map(KpiDefinition::getId).toList();
+        return kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(kpiIds, submissionType)
+                .stream()
+                .collect(Collectors.groupingBy(submission -> submission.getKpiDefinition().getId()));
+    }
+
     private DashboardKpiItemResponse toDashboardKpiItem(
             KpiDefinition kpiDefinition,
             User user,
-            String requestedReportingPeriod
+            String requestedReportingPeriod,
+            List<KpiSubmission> kpiSubmissions
     ) {
-        SubmissionType submissionType = resolveSubmissionTypeForDashboard(user.getRole());
         LocalDate assignmentStart = kpiDefinition.getDateCreated() != null
                 ? kpiDefinition.getDateCreated().toLocalDate()
                 : LocalDate.now();
@@ -350,7 +365,7 @@ public class DashboardService {
                         LocalDate.now()
                 );
 
-        List<KpiSubmission> relatedSubmissions = resolveDashboardSubmissions(kpiDefinition, user, submissionType);
+        List<KpiSubmission> relatedSubmissions = filterDashboardSubmissions(kpiDefinition, user, kpiSubmissions);
         KpiPeriodProgress progress = reportingPeriod != null
                 ? KpiPeriodProgressCalculator.calculateExisting(kpiDefinition, reportingPeriod, relatedSubmissions)
                 : null;
@@ -391,35 +406,26 @@ public class DashboardService {
         return item;
     }
 
-    private List<KpiSubmission> resolveDashboardSubmissions(
+    /** Keeps the KPI's submissions this user may see on the dashboard (same rules as before, filtered in memory). */
+    private List<KpiSubmission> filterDashboardSubmissions(
             KpiDefinition kpiDefinition,
             User user,
-            SubmissionType submissionType
+            List<KpiSubmission> kpiSubmissions
     ) {
         if (canViewCommitteeWideProgress(user, kpiDefinition)) {
             List<Long> organizationIds = resolveCommitteeOrganizationIds(kpiDefinition.getCommittee());
-            if (organizationIds.isEmpty()) {
-                return List.of();
-            }
-            return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdInAndSubmissionType(
-                    kpiDefinition.getId(),
-                    organizationIds,
-                    submissionType
-            );
+            return kpiSubmissions.stream()
+                    .filter(submission -> organizationIds.contains(submission.getOrganization().getId()))
+                    .toList();
         }
 
         if (user.getOrganizationId() != null) {
-            return kpiSubmissionRepository.findByKpiDefinitionIdAndOrganizationIdAndSubmissionType(
-                    kpiDefinition.getId(),
-                    user.getOrganizationId(),
-                    submissionType
-            );
+            return kpiSubmissions.stream()
+                    .filter(submission -> user.getOrganizationId().equals(submission.getOrganization().getId()))
+                    .toList();
         }
 
-        return kpiSubmissionRepository.findByKpiDefinitionId(kpiDefinition.getId())
-                .stream()
-                .filter(s -> s.getSubmissionType() == submissionType)
-                .toList();
+        return kpiSubmissions;
     }
 
     private List<DashboardOrganizationProgressResponse> buildOrganizationBreakdowns(
@@ -561,4 +567,4 @@ public class DashboardService {
 
         return user;
     }
-}
+}

@@ -134,7 +134,7 @@ class KpiSubmissionServiceTest {
 
         when(kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(9L))
                 .thenReturn(List.of(ownSubmission, otherMemberSubmission));
-        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+        when(submissionDocumentRepository.findBySubmissionIdIn(any())).thenReturn(List.of());
 
         List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
                 null, null, null, null);
@@ -159,7 +159,7 @@ class KpiSubmissionServiceTest {
 
         when(kpiSubmissionRepository.findByOrganizationIdOrderByDateCreatedDesc(9L))
                 .thenReturn(List.of(finalSubmission));
-        when(submissionDocumentRepository.findBySubmissionId(any())).thenReturn(List.of());
+        when(submissionDocumentRepository.findBySubmissionIdIn(any())).thenReturn(List.of());
 
         List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
                 null, null, SubmissionType.FINAL, null);
@@ -579,7 +579,7 @@ class KpiSubmissionServiceTest {
         otherOrgSubmission.setId(500L);
         when(kpiSubmissionRepository.findByCommitteeIdsOrderByDateCreatedDesc(List.of(1L)))
                 .thenReturn(List.of(otherOrgSubmission));
-        when(submissionDocumentRepository.findBySubmissionId(500L)).thenReturn(List.of());
+        when(submissionDocumentRepository.findBySubmissionIdIn(any())).thenReturn(List.of());
 
         List<KpiSubmissionResponse> responses = kpiSubmissionService.getSubmissionsForCurrentUser(
                 null, null, null, null);

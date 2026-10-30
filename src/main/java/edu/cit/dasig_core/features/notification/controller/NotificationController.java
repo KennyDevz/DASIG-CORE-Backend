@@ -27,6 +27,12 @@ public class NotificationController {
         return ResponseEntity.ok(notificationService.getAllNotifications());
     }
 
+    /** Unread notification count for the sidebar badge. */
+    @GetMapping("/unread-count")
+    public ResponseEntity<Long> countUnreadNotifications() {
+        return ResponseEntity.ok(notificationService.countUnreadNotifications());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<NotificationDetailResponse> getNotificationById(@PathVariable Long id) {
         return ResponseEntity.ok(notificationService.getNotificationById(id));

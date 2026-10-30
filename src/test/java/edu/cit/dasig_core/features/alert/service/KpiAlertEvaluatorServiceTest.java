@@ -222,19 +222,20 @@ class KpiAlertEvaluatorServiceTest {
     }
 
     private void givenKpi(LocalDate created, LocalDate deadline, double approvedTotal) {
-        when(kpiDefinitionRepository.findAll()).thenReturn(List.of(kpi(created, deadline)));
+        KpiDefinition kpi = kpi(created, deadline);
+        when(kpiDefinitionRepository.findAll()).thenReturn(List.of(kpi));
 
         KpiSubmission submission = new KpiSubmission();
+        submission.setKpiDefinition(kpi);
         submission.setSubmittedValue(approvedTotal);
         submission.setSubmissionType(SubmissionType.FINAL);
         submission.setReviewStatus(SubmissionReviewStatus.APPROVED);
-        when(kpiSubmissionRepository.findByKpiDefinitionIdAndSubmissionType(1L, SubmissionType.FINAL))
+        when(kpiSubmissionRepository.findByKpiDefinitionIdInAndSubmissionType(anyCollection(), eq(SubmissionType.FINAL)))
                 .thenReturn(List.of(submission));
     }
 
     private void givenOpenAlerts(Alert... alerts) {
-        when(alertRepository.findByKpiDefinitionIdAndStatusIn(eq(1L), anyCollection()))
-                .thenReturn(List.of(alerts));
+        when(alertRepository.findByStatusIn(anyCollection())).thenReturn(List.of(alerts));
     }
 
     private Alert openAlert(String type) {

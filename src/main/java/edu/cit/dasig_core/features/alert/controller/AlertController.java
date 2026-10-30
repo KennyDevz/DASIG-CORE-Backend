@@ -30,6 +30,18 @@ public class AlertController {
         return ResponseEntity.ok(alertService.getAllAlerts());
     }
 
+    /** All alerts with details in one request (Alerts page). */
+    @GetMapping("/details")
+    public ResponseEntity<List<AlertDetailResponse>> getAllAlertDetails() {
+        return ResponseEntity.ok(alertService.getAllAlertDetails());
+    }
+
+    /** Unacknowledged alert count for the sidebar badge. */
+    @GetMapping("/unacknowledged-count")
+    public ResponseEntity<Long> countUnacknowledgedAlerts() {
+        return ResponseEntity.ok(alertService.countUnacknowledgedAlerts());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<AlertDetailResponse> getAlertById(@PathVariable Long id) {
         return ResponseEntity.ok(alertService.getAlertById(id));

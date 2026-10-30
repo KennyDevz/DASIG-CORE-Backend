@@ -258,7 +258,6 @@ class ReportServiceTest {
         a.setStatus("GENERATED");
         // sectionsJson intentionally left null — an older, pre-citations report
         when(reportRepository.findAllByOrderByGeneratedAtDesc()).thenReturn(List.of(a));
-        when(committeeRepository.findById(1L)).thenReturn(Optional.empty());
 
         List<ReportResponse> responses = reportService.getAllReports();
 
