@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.GenericGenerator;
+import edu.cit.dasig_core.features.report.client.LLMException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -42,7 +43,7 @@ public class Report {
     @Column(name = "period_to", nullable = false)
     private LocalDate periodTo;
 
-    @Column(name = "narrative_text", columnDefinition = "TEXT", nullable = false)
+    @Column(name = "narrative_text", columnDefinition = "TEXT")
     private String narrativeText;
 
     // Structured per-section data (heading/text/resolved source citations), serialized as JSON.
@@ -56,4 +57,9 @@ public class Report {
     @CreationTimestamp
     @Column(name = "generated_at", nullable = false, updatable = false)
     private LocalDateTime generatedAt;
+
+    // Set only when status is FAILED. Stored as the enum name (e.g. "RATE_LIMITED"), never raw error text.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "failure_reason")
+    private LLMException.Reason failureReason;
 }
