@@ -47,6 +47,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import edu.cit.dasig_core.features.report.client.LLMException;
+import java.util.function.Supplier;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -146,6 +149,10 @@ public class ReportService {
     public byte[] exportAsPdf(String reportId) {
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found with ID: " + reportId));
+
+        if ("FAILED".equals(report.getStatus())) {
+            throw new IllegalArgumentException("A failed report cannot be exported.");
+        }
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4, 50, 50, 60, 60);
@@ -259,7 +266,7 @@ public class ReportService {
             return baos.toByteArray();
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to generate PDF: " + e.getMessage());
+            throw new RuntimeException("Failed to generate PDF", e);
         }
     }
 
@@ -300,6 +307,9 @@ public class ReportService {
             Document document, String text, Font headerFont, Font labelFont, Font bodyFont, Font italicFont, Font bulletFont,
             List<Integer> trailingRefNumbers)
             throws DocumentException {
+            if (text == null) {
+                return;
+            }
             String[] lines = text.split("\n");
 
             int lastContentLineIndex = -1;
@@ -597,7 +607,7 @@ public class ReportService {
         prompt.append("each with a \"heading\", a \"text\" (the narrative body), and a \"citedRecordTags\" array:\n");
         prompt.append("1. heading: \"Overall Performance Summary\" — analyze how the cumulative trajectory is moving across the window. Appreciate steady gains even if temporary periods look low due to contribution dips.\n");
         prompt.append("2. heading: \"Underperforming KPIs\" — highlight records whose Current Status is Overdue or At Risk.\n");
-        prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to On track or Completed.\n");
+        prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to On Track or Completed.\n");
         prompt.append("4. heading: \"Recommendations\" — provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.\n\n");
 
         prompt.append("=== CITATION RULES (STRICT) ===\n");
@@ -624,28 +634,24 @@ public class ReportService {
         prompt.append("- Write any date you mention in \"Month dd, yyyy\" format (e.g. \"August 01, 2026\", always two-digit day), matching the format already used for Submission Date above — never YYYY-MM-DD.\n");
 
         // Call Groq LLM API and parse its structured response
-        String narrative;
+        String narrative = null;
         String sectionsJson = null;
         String status;
-        try {
-            String rawJson;
-            LlmReportPayload payload;
-            try {
-                rawJson = llmApiClient.generateReport(prompt.toString());
-                payload = objectMapper.readValue(rawJson, LlmReportPayload.class);
-            } catch (Exception primaryFailure) {
-                // Strict json_schema mode was rejected or returned unparsable content — retry once
-                // with the looser json_object mode (still guarantees valid JSON, not the exact shape).
-                rawJson = llmApiClient.generateReportAsJsonObject(prompt.toString());
-                payload = objectMapper.readValue(rawJson, LlmReportPayload.class);
-            }
+        LLMException.Reason failureReason = null;
 
-            List<ReportSectionDto> resolvedSections = resolveSections(payload, tagToSubmission, orgIdToName);
+        try {
+            List<ReportSectionDto> resolvedSections =
+                    generateSections(prompt.toString(), tagToSubmission, orgIdToName);
             narrative = flattenSections(resolvedSections);
             sectionsJson = objectMapper.writeValueAsString(resolvedSections);
             status = "GENERATED";
+        } catch (LLMException e) {
+            log.error("Report generation failed [{}]", e.getReason(), e);
+            failureReason = e.getReason();
+            status = "FAILED";
         } catch (Exception e) {
-            narrative = "Report generation failed: " + e.getMessage();
+            log.error("Report generation failed unexpectedly", e);
+            failureReason = LLMException.Reason.INVALID_RESPONSE;
             status = "FAILED";
         }
 
@@ -655,13 +661,80 @@ public class ReportService {
         report.setKpiDefinitionId(kpiDefinitionId);
         report.setPeriodFrom(periodFrom);
         report.setPeriodTo(periodTo);
-        report.setNarrativeText(narrative);
-        report.setSectionsJson(sectionsJson);
+        report.setNarrativeText(narrative);       // null when FAILED
+        report.setSectionsJson(sectionsJson);     // null when FAILED
         report.setStatus(status);
+        report.setFailureReason(failureReason);   // null when GENERATED
 
         Report saved = reportRepository.save(report);
 
         return mapToResponse(saved);
+    }
+
+    private static final int EXPECTED_SECTION_COUNT = 4;
+    private static final long RETRY_BACKOFF_MS = 2000;
+
+    /**
+     * Calls the LLM and returns validated, resolved sections. Throws LLMException on any failure.
+     * - Falls back to json_object mode only when strict json_schema was rejected or its output was unparsable.
+     * - Retries once (inside callWithRetry) on rate limit / service unavailable.
+     */
+    private List<ReportSectionDto> generateSections(
+            String prompt, Map<String, KpiSubmission> tagToSubmission, Map<Long, String> orgIdToName) {
+        LlmReportPayload payload;
+        try {
+            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReport(prompt)));
+        } catch (LLMException e) {
+            if (e.getReason() != LLMException.Reason.SCHEMA_REJECTED
+                    && e.getReason() != LLMException.Reason.INVALID_RESPONSE) {
+                throw e;
+            }
+            log.warn("Strict json_schema mode failed [{}], retrying in json_object mode", e.getReason());
+            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReportAsJsonObject(prompt)));
+        }
+
+        validatePayload(payload);
+        return resolveSections(payload, tagToSubmission, orgIdToName);
+    }
+
+    private String callWithRetry(Supplier<String> call) {
+        try {
+            return call.get();
+        } catch (LLMException e) {
+            if (e.getReason() != LLMException.Reason.RATE_LIMITED
+                    && e.getReason() != LLMException.Reason.UNAVAILABLE) {
+                throw e;
+            }
+            log.warn("Transient LLM failure [{}], retrying once in {} ms", e.getReason(), RETRY_BACKOFF_MS);
+            try {
+                Thread.sleep(RETRY_BACKOFF_MS);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
+            return call.get();
+        }
+    }
+
+    private LlmReportPayload parsePayload(String rawJson) {
+        try {
+            return objectMapper.readValue(rawJson, LlmReportPayload.class);
+        } catch (Exception e) {
+            throw new LLMException(LLMException.Reason.INVALID_RESPONSE, e);
+        }
+    }
+
+    private void validatePayload(LlmReportPayload payload) {
+        List<LlmSection> sections = payload == null ? null : payload.getSections();
+        if (sections == null || sections.size() != EXPECTED_SECTION_COUNT) {
+            throw new LLMException(LLMException.Reason.INVALID_RESPONSE);
+        }
+        for (LlmSection s : sections) {
+            if (s.getHeading() == null || s.getHeading().isBlank()
+                    || s.getText() == null || s.getText().isBlank()) {
+                throw new LLMException(LLMException.Reason.INVALID_RESPONSE);
+            }
+        }
     }
 
     /**
@@ -828,22 +901,24 @@ public class ReportService {
         response.setPeriodTo(report.getPeriodTo());
         response.setNarrativeText(report.getNarrativeText());
         response.setStatus(report.getStatus());
+        if (report.getFailureReason() != null) {
+            response.setFailureMessage(report.getFailureReason().getUserMessage());
+        }
         response.setGeneratedAt(report.getGeneratedAt());
         response.setSections(deserializeSections(report.getSectionsJson()));
         return response;
     }
 
-    private String toClassifyPerformanceStatus(String status){
-        if(status == null){
-            return "On track";
+    private String toClassifyPerformanceStatus(String status) {
+        if (status == null) {
+            return "On Track";
         }
-        switch(status){
-            case PerformanceStatusClassifier.ON_TRACK: return "On track";
+        switch (status) {
+            case PerformanceStatusClassifier.ON_TRACK:  return "On Track";
             case PerformanceStatusClassifier.COMPLETED: return "Completed";
-            case PerformanceStatusClassifier.OVERDUE: return "Overdue";
-            case PerformanceStatusClassifier.AT_RISK: return "At risk";
-            default: return "status";
-
+            case PerformanceStatusClassifier.OVERDUE:   return "Overdue";
+            case PerformanceStatusClassifier.AT_RISK:   return "At Risk";
+            default:                                    return "On Track";//To Clarify
         }
     }
 

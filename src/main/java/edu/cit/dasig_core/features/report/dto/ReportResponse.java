@@ -23,4 +23,8 @@ public class ReportResponse {
     // Null/empty for reports generated before per-section citations were introduced —
     // the frontend falls back to rendering narrativeText as flat markdown in that case.
     private List<ReportSectionDto> sections;
+
+    // Set only for FAILED reports. A fixed, user-safe message derived from the failure reason,
+    // never raw error text.
+    private String failureMessage;
 }

@@ -5,10 +5,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class LLMApiClient {
@@ -95,19 +100,41 @@ public class LLMApiClient {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        Map<?, ?> response = restTemplate.postForObject(GROQ_URL, request, Map.class);
-
-        if (response == null || !response.containsKey("choices")) {
-            throw new IllegalStateException("Groq API returned an empty or invalid response.");
+        LLMChatResponse response;
+        try {
+            response = restTemplate.postForObject(GROQ_URL, request, LLMChatResponse.class);
+        } catch (HttpClientErrorException e) {
+            int status = e.getStatusCode().value();
+            if (status == 429) {
+                throw new LLMException(LLMException.Reason.RATE_LIMITED, e);
+            } else if (status == 401 || status == 403) {
+                log.error("Groq authentication failed (HTTP {}) - check groq.api-key", status);
+                throw new LLMException(LLMException.Reason.AUTH, e);
+            } else if (status == 400) {
+                throw new LLMException(LLMException.Reason.SCHEMA_REJECTED, e);
+            }
+            throw new LLMException(LLMException.Reason.INVALID_RESPONSE, e);
+        } catch (HttpServerErrorException e) {
+            throw new LLMException(LLMException.Reason.UNAVAILABLE, e);
+        } catch (ResourceAccessException e) {
+            throw new LLMException(LLMException.Reason.TIMEOUT, e);
         }
 
-        List<?> choices = (List<?>) response.get("choices");
-        if (choices.isEmpty()) {
-            throw new IllegalStateException("No completion choices returned by Groq.");
+        if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
+            throw new LLMException(LLMException.Reason.EMPTY_RESPONSE);
         }
 
-        Map<?, ?> firstChoice = (Map<?, ?>) choices.get(0);
-        Map<?, ?> message = (Map<?, ?>) firstChoice.get("message");
-        return (String) message.get("content");
+        LLMChatResponse.Choice choice = response.getChoices().get(0);
+
+        if ("length".equals(choice.getFinishReason())) {
+            throw new LLMException(LLMException.Reason.TRUNCATED);
+        }
+
+        String content = choice.getMessage() == null ? null : choice.getMessage().getContent();
+        if (content == null || content.isBlank()) {
+            throw new LLMException(LLMException.Reason.EMPTY_RESPONSE);
+        }
+
+        return content;
     }
 }
