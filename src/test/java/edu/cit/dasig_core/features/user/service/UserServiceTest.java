@@ -111,7 +111,7 @@ class UserServiceTest {
     }
 
     @Test
-    void registerUser_throwsWhenAdminHasOrganization() {
+    void registerUser_clearsOrganizationWhenRoleIsAdmin() {
         CreateUserRequest request = new CreateUserRequest();
         request.setName("Admin");
         request.setEmail("admin@example.com");
@@ -119,10 +119,19 @@ class UserServiceTest {
         request.setOrganizationId(5L);
 
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(12L);
+            return saved;
+        });
 
-        assertThatThrownBy(() -> userService.registerUser(request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("DASIG Admin should not be tied to a specific organization.");
+        UserResponse response = userService.registerUser(request);
+
+        ArgumentCaptor<User> savedUserCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(savedUserCaptor.capture());
+        assertThat(savedUserCaptor.getValue().getOrganizationId()).isNull();
+        assertThat(response.getOrganizationId()).isNull();
     }
 
     @Test
@@ -265,6 +274,25 @@ class UserServiceTest {
 
         assertThat(response.getCommitteeIds()).containsExactly(5L);
         verify(committeeRepository).findAllById(List.of(5L));
+    }
+
+    @Test
+    void modifyUser_clearsOrganizationWhenRoleBecomesAdmin() {
+        User user = existingUser(1L, "user@example.com", "hash");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmailAndIdNot("user@example.com", 1L)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setName("New Name");
+        request.setEmail("user@example.com");
+        request.setRole("DASIG_ADMIN");
+        request.setOrganizationId(2L);
+
+        UserResponse response = userService.modifyUser(1L, request);
+
+        assertThat(response.getRole()).isEqualTo("DASIG_ADMIN");
+        assertThat(response.getOrganizationId()).isNull();
     }
 
     @Test
