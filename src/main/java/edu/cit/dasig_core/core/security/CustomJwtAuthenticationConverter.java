@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Component
@@ -90,11 +91,9 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
 
                 // Domain-Based Organization Routing (Only runs once on creation)
                 if ("DASIG_ADMIN".equals(entraRole)) {
-                    newUser.setOrganizationId(1L); 
+                    newUser.setOrganizationId(null);
                 } else {
-                    String domain = email.substring(email.indexOf("@") + 1).toLowerCase();
-                    Optional<Organization> org = organizationRepository.findByContactEmailEndingWith("@" + domain);
-                    newUser.setOrganizationId(org.isPresent() ? org.get().getId() : 2L);
+                    newUser.setOrganizationId(resolveOrganizationIdForEmail(email));
                 }
 
                 newUser.setStatus("Active");
@@ -104,12 +103,29 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
                 userRepository.save(newUser);
                 
             } else {
-                // --- SCENARIO B: EXISTING USER (ROLE SYNCHRONIZATION) ---
+                // --- SCENARIO B: EXISTING USER (ROLE & ORGANIZATION SYNCHRONIZATION) ---
                 User existingUser = existingUserOpt.get();
-                
-                // Only trigger a database update if their Entra ID role is different from their database role
+                boolean changed = false;
+
+                // Sync the role from the Entra ID token when it differs from the stored role
                 if (!entraRole.equals(existingUser.getRole())) {
                     existingUser.setRole(entraRole);
+                    changed = true;
+                }
+
+                // Keep the organization aligned with the current role and email domain:
+                // admins are never tied to an organization, everyone else is routed by
+                // their email domain (so a stale null from a past admin role is replaced,
+                // and a stale org from a past non-admin role is cleared on promotion).
+                Long desiredOrganizationId = "DASIG_ADMIN".equals(entraRole)
+                        ? null
+                        : resolveOrganizationIdForEmail(email);
+                if (!Objects.equals(desiredOrganizationId, existingUser.getOrganizationId())) {
+                    existingUser.setOrganizationId(desiredOrganizationId);
+                    changed = true;
+                }
+
+                if (changed) {
                     userRepository.save(existingUser);
                 }
             }
@@ -117,5 +133,15 @@ public class CustomJwtAuthenticationConverter implements Converter<Jwt, Abstract
 
         // 5. Return the token using the EMAIL as the Principal Name instead of the Entra UUID
         return new JwtAuthenticationToken(jwt, authorities, email);
+    }
+
+    /**
+     * Resolves an organization for a non-admin user based on their email domain,
+     * falling back to a default organization when no contact match is found.
+     */
+    private Long resolveOrganizationIdForEmail(String email) {
+        String domain = email.substring(email.indexOf("@") + 1).toLowerCase();
+        Optional<Organization> org = organizationRepository.findByContactEmailEndingWith("@" + domain);
+        return org.isPresent() ? org.get().getId() : 2L;
     }
 }

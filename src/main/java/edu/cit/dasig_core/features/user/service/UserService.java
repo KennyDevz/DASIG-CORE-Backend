@@ -39,15 +39,15 @@ public class UserService {
             throw new IllegalArgumentException("Email is already in use.");
         }
 
-        // 2. Validate role-based organization rules
-        validateOrganizationRequirement(request.getRole(), request.getOrganizationId());
+        // 2. Resolve role-based organization rules (DASIG Admin is always unassigned)
+        Long organizationId = resolveOrganizationId(request.getRole(), request.getOrganizationId());
 
         // 3. Map DTO to Entity
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setRole(request.getRole());
-        user.setOrganizationId(request.getOrganizationId());
+        user.setOrganizationId(organizationId);
         user.setStatus("Active");
 
         // 4. SRS UC-1.1.2: System auto-generates a temporary password & hashes it
@@ -80,12 +80,13 @@ public class UserService {
             throw new IllegalArgumentException("Email is already in use by another account.");
         }
 
-        validateOrganizationRequirement(request.getRole(), request.getOrganizationId());
+        // Resolve role-based organization rules (DASIG Admin is always unassigned)
+        Long organizationId = resolveOrganizationId(request.getRole(), request.getOrganizationId());
 
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setRole(request.getRole());
-        user.setOrganizationId(request.getOrganizationId());
+        user.setOrganizationId(organizationId);
 
         if ("TBI_MANAGER".equals(request.getRole()) && request.getCommitteeIds() != null && !request.getCommitteeIds().isEmpty()) {
             List<Committee> committees = committeeRepository.findAllById(request.getCommitteeIds());
@@ -159,16 +160,18 @@ public class UserService {
     }
 
     /**
-     * Cross-field validation: Ensures TBI Managers/Staff belong to an organization,
-     * but prevents the global DASIG Admin from being restricted to one.
+     * Cross-field resolution: Ensures TBI Managers/Staff belong to an organization,
+     * and automatically clears the organization for the global DASIG Admin so it is
+     * never tied to a specific organization.
      */
-    private void validateOrganizationRequirement(String role, Long organizationId) {
+    private Long resolveOrganizationId(String role, Long organizationId) {
+        if ("DASIG_ADMIN".equals(role)) {
+            return null;
+        }
         if (("TBI_MANAGER".equals(role) || "STAFF".equals(role)) && organizationId == null) {
             throw new IllegalArgumentException("Organization ID is required for TBI Managers and Staff.");
         }
-        if ("DASIG_ADMIN".equals(role) && organizationId != null) {
-            throw new IllegalArgumentException("DASIG Admin should not be tied to a specific organization.");
-        }
+        return organizationId;
     }
 
     /**
