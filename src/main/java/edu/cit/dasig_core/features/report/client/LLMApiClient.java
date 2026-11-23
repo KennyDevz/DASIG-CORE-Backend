@@ -10,6 +10,7 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -71,32 +72,36 @@ public class LLMApiClient {
         );
     }
 
-    public String generateReport(String prompt) {
-        return generateReport(prompt, reportJsonSchema());
+    public String generateReport(String systemPrompt, String userPrompt) {
+        return generateReport(systemPrompt, userPrompt, reportJsonSchema());
     }
 
     /**
      * Looser fallback for when the model/account rejects strict json_schema mode —
      * still forces valid JSON, just without a guaranteed shape.
      */
-    public String generateReportAsJsonObject(String prompt) {
-        return generateReport(prompt, Map.of("type", "json_object"));
+    public String generateReportAsJsonObject(String systemPrompt, String userPrompt) {
+        return generateReport(systemPrompt, userPrompt, Map.of("type", "json_object"));
     }
 
-    private String generateReport(String prompt, Map<String, Object> responseFormat) {
+    private String generateReport(String systemPrompt, String userPrompt, Map<String, Object> responseFormat) {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(apiKey);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        Map<String, Object> body = Map.of(
-                "model", modelName,
-                "messages", List.of(
-                        Map.of("role", "system", "content", "You are an assistant that generates structured reports."),
-                        Map.of("role", "user", "content", prompt)
-                ),
-                "max_tokens", 5000,
-                "response_format", responseFormat
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", modelName);
+        body.put("messages", List.of(
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
+        ));
+        body.put("max_tokens", 5000);
+        body.put("response_format", responseFormat);
+        // Fixed settings instead of Groq's defaults; Groq recommends 0.5-0.7 for reasoning models
+        body.put("temperature", 0.5);
+        if (modelName != null && modelName.startsWith("openai/gpt-oss")) {
+            body.put("reasoning_effort", "medium"); // only GPT-OSS models accept this setting
+        }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 

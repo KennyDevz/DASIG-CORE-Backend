@@ -119,7 +119,7 @@ class ReportServiceTest {
         committee.setName("Tech Committee");
         committee.setOrganizations(List.of());
         when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
-        when(llmApiClient.generateReport(anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0001");
@@ -145,8 +145,8 @@ class ReportServiceTest {
         when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
         // Both the strict-schema attempt and the json_object fallback fail — the report must
         // still save as FAILED rather than throwing out of buildAndSaveReport entirely.
-        when(llmApiClient.generateReport(anyString())).thenThrow(new RuntimeException("Groq is down"));
-        when(llmApiClient.generateReportAsJsonObject(anyString())).thenThrow(new RuntimeException("Groq is down"));
+        when(llmApiClient.generateReport(anyString(), anyString())).thenThrow(new RuntimeException("Groq is down"));
+        when(llmApiClient.generateReportAsJsonObject(anyString(), anyString())).thenThrow(new RuntimeException("Groq is down"));
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0002");
@@ -169,8 +169,8 @@ class ReportServiceTest {
         when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
         // Strict json_schema mode fails (e.g. unsupported by the configured model);
         // the looser json_object fallback succeeds and the report should still generate.
-        when(llmApiClient.generateReport(anyString())).thenThrow(new RuntimeException("response_format not supported"));
-        when(llmApiClient.generateReportAsJsonObject(anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenThrow(new RuntimeException("response_format not supported"));
+        when(llmApiClient.generateReportAsJsonObject(anyString(), anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0006");
@@ -181,7 +181,7 @@ class ReportServiceTest {
 
         assertThat(response.getStatus()).isEqualTo("GENERATED");
         assertThat(response.getSections()).hasSize(4);
-        verify(llmApiClient).generateReportAsJsonObject(anyString());
+        verify(llmApiClient).generateReportAsJsonObject(anyString(), anyString());
     }
 
     @Test
@@ -191,7 +191,7 @@ class ReportServiceTest {
         committee.setName("Empty Committee");
         committee.setOrganizations(List.of());
         when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
-        when(llmApiClient.generateReport(anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0003");
@@ -223,7 +223,7 @@ class ReportServiceTest {
         kpi.setCommittee(committee);
         when(kpiDefinitionRepository.findById(5L)).thenReturn(Optional.of(kpi));
         when(submissionRepository.findByKpiDefinitionId(5L)).thenReturn(List.of());
-        when(llmApiClient.generateReport(anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0004");
@@ -414,7 +414,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0007");
@@ -426,7 +426,7 @@ class ReportServiceTest {
         ReportResponse response = reportService.generateCommitteeReport(
                 1L, LocalDate.now().minusMonths(1), LocalDate.now());
 
-        verify(llmApiClient).generateReport(promptCaptor.capture());
+        verify(llmApiClient).generateReport(anyString(), promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
 
         // Data minimization: the real org name and Notes must never reach the third-party LLM
@@ -505,7 +505,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0083");
@@ -521,7 +521,7 @@ class ReportServiceTest {
     }
 
     @Test
-    void generateCommitteeReport_computesEachOrganizationsCumulativeSeparately_whenTheySharedAKpi() {
+    void generateCommitteeReport_listsEachOrganizationsContributionSeparately_whenTheySharedAKpi() {
         Committee committee = new Committee();
         committee.setId(1L);
         committee.setName("Startup Committee");
@@ -584,7 +584,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0081");
@@ -595,14 +595,11 @@ class ReportServiceTest {
 
         reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
 
-        verify(llmApiClient).generateReport(promptCaptor.capture());
+        verify(llmApiClient).generateReport(anyString(), promptCaptor.capture());
         String sentPrompt = promptCaptor.getValue();
 
-        // Each organization's own cumulative must reflect only its own submission, never the
-        // committee-wide pooled total (8 + 20 = 28) that a missing organization filter would produce.
-        assertThat(sentPrompt).contains("Cumulative Value To Date: 8.00 Count");
-        assertThat(sentPrompt).contains("Cumulative Value To Date: 20.00 Count");
-        assertThat(sentPrompt).doesNotContain("Cumulative Value To Date: 28.00 Count");
+        // Each organization's contribution is listed separately (computed in code, not by the AI)
+        assertThat(sentPrompt).contains("- Startups Incubated: Org-10: 8.00 Count; Org-20: 20.00 Count");
     }
 
     @Test
@@ -626,7 +623,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0009");
@@ -662,7 +659,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0010");
@@ -699,7 +696,7 @@ class ReportServiceTest {
                   ]
                 }
                 """;
-        when(llmApiClient.generateReport(anyString())).thenReturn(llmResponse);
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(llmResponse);
         when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
             Report report = invocation.getArgument(0);
             report.setId("PR-2026-0010");
@@ -713,5 +710,73 @@ class ReportServiceTest {
                 .isEqualTo("As of August 01, 2026, progress remains steady.");
         assertThat(response.getSections().get(3).getText())
                 .isEqualTo("Follow up before September 15, 2026.");
+    }
+
+    @Test
+    void generateCommitteeReport_addsKpiSummaryWithDashboardFigures_toPromptAndFirstSection() {
+        Committee committee = new Committee();
+        committee.setId(1L);
+        committee.setName("Validation Committee");
+
+        Organization orgA = new Organization();
+        orgA.setId(10L);
+        orgA.setName("Validation TBI A");
+        committee.setOrganizations(List.of(orgA));
+
+        LocalDate deadline = LocalDate.now().plusDays(30);
+        KpiDefinition kpi = new KpiDefinition();
+        kpi.setId(7L);
+        kpi.setName("Business Mentoring Sessions");
+        kpi.setUnit("sessions");
+        kpi.setTargetValue(10.0);
+        kpi.setThreshold(5.0);
+        kpi.setReportingFrequency(ReportingFrequency.ONE_TIME);
+        kpi.setDeadline(deadline);
+        kpi.setCommittee(committee);
+
+        String period = "Due by " + deadline.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH));
+        KpiSubmission submission = new KpiSubmission();
+        submission.setId(301L);
+        submission.setReferenceCode("SUB-000301");
+        submission.setKpiDefinition(kpi);
+        submission.setOrganization(orgA);
+        submission.setSubmittedValue(7.0);
+        submission.setReportingPeriod(period);
+        submission.setSubmissionDate(LocalDate.now());
+        submission.setSubmissionType(SubmissionType.FINAL);
+
+        when(committeeRepository.findById(1L)).thenReturn(Optional.of(committee));
+        when(kpiDefinitionRepository.findByCommitteeId(1L)).thenReturn(List.of(kpi));
+        when(submissionRepository.findByOrganizationIdIn(List.of(10L))).thenReturn(List.of(submission));
+        when(llmApiClient.generateReport(anyString(), anyString())).thenReturn(MINIMAL_STRUCTURED_RESPONSE);
+        when(reportRepository.save(any(Report.class))).thenAnswer(invocation -> {
+            Report report = invocation.getArgument(0);
+            report.setId("PR-2026-0090");
+            return report;
+        });
+
+        ArgumentCaptor<String> systemCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+
+        ReportResponse response = reportService.generateCommitteeReport(1L, LocalDate.now().minusMonths(1), LocalDate.now());
+
+        verify(llmApiClient).generateReport(systemCaptor.capture(), promptCaptor.capture());
+
+        // The rules (system message) describe the real At Risk rule, not the old 60-day rule
+        assertThat(systemCaptor.getValue()).contains("at least 25% of the KPI's timeline");
+        assertThat(systemCaptor.getValue()).doesNotContain("within 60 days");
+
+        // The data (user message) carries the pre-computed KPI figures
+        String sentPrompt = promptCaptor.getValue();
+        assertThat(sentPrompt).contains("- KPI: Business Mentoring Sessions");
+        assertThat(sentPrompt).contains("Approved Total to Date: 7.00 sessions");
+        assertThat(sentPrompt).contains("Remaining to Target: 3.00 sessions");
+        assertThat(sentPrompt).contains("(30 days left)");
+
+        // The summary table is built in code at the top of the first section, followed by the AI text
+        String firstSection = response.getSections().get(0).getText();
+        assertThat(firstSection).contains("| KPI | Target | Approved to Date | Achievement | Status | Approved in Period |");
+        assertThat(firstSection).contains("| Business Mentoring Sessions | 10.00 sessions | 7.00 sessions |");
+        assertThat(firstSection).endsWith("All good.");
     }
 }

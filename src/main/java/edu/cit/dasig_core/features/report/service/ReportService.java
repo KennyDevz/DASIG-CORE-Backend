@@ -15,6 +15,7 @@ import edu.cit.dasig_core.features.committee.model.Committee;
 import edu.cit.dasig_core.features.committee.repository.CommitteeRepository;
 import edu.cit.dasig_core.features.kpi.model.KpiDefinition;
 import edu.cit.dasig_core.features.kpi.repository.KpiDefinitionRepository;
+import edu.cit.dasig_core.features.kpi.util.ReportingPeriodResolver;
 import edu.cit.dasig_core.features.kpisubmission.model.KpiSubmission;
 import edu.cit.dasig_core.features.kpisubmission.model.SubmissionType;
 import edu.cit.dasig_core.features.kpisubmission.repository.KpiSubmissionRepository;
@@ -38,6 +39,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -91,7 +93,13 @@ public class ReportService {
         String contextHeader = "Generate a comprehensive committee performance report covering all incubator "
                 + "organizations under the \"" + committee.getName() + "\" committee.\n\n";
 
-        return buildAndSaveReport(submissions, committeeId, ReportType.COMMITTEE, null, periodFrom, periodTo, contextHeader);
+        // Every active KPI of the committee goes into the KPI summary, even without submissions in the window
+        List<KpiDefinition> committeeKpis = kpiDefinitionRepository.findByCommitteeId(committeeId).stream()
+                .filter(kpi -> !kpi.isArchived())
+                .toList();
+
+        return buildAndSaveReport(submissions, committeeKpis, committeeId, ReportType.COMMITTEE, null,
+                periodFrom, periodTo, contextHeader);
     }
 
     public ReportResponse generateKpiReport(Long kpiDefinitionId, LocalDate periodFrom, LocalDate periodTo) {
@@ -107,7 +115,8 @@ public class ReportService {
         String contextHeader = "Generate a specific performance report focused strictly on the following single KPI, "
                 + "covering all incubator organizations under the \"" + kpi.getCommittee().getName() + "\" committee that report on it.\n\n";
 
-        return buildAndSaveReport(submissions, kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId, periodFrom, periodTo, contextHeader);
+        return buildAndSaveReport(submissions, List.of(kpi), kpi.getCommittee().getId(), ReportType.KPI, kpiDefinitionId,
+                periodFrom, periodTo, contextHeader);
     }
 
     // Guards against an inverted range (periodFrom after periodTo), which would otherwise silently
@@ -502,6 +511,7 @@ public class ReportService {
 
     private ReportResponse buildAndSaveReport(
             List<KpiSubmission> allSubmissions,
+            List<KpiDefinition> summaryKpis,
             Long committeeId,
             ReportType reportType,
             Long kpiDefinitionId,
@@ -519,119 +529,96 @@ public class ReportService {
                 })
                 .toList();
 
-        // Build Prompt
+        // KPI figures are calculated here, exactly like the dashboard, so the AI never adds up numbers itself
+        LocalDate today = today();
+        List<KpiSummaryRow> kpiSummary = buildKpiSummary(summaryKpis, allSubmissions, filteredWindowSubmissions, today);
+
+        // The user message carries only this report's data; the fixed rules are in REPORT_RULES (system message)
         StringBuilder prompt = new StringBuilder();
-        prompt.append("You are an expert performance analyst for a technology business incubator program.\n");
         prompt.append(contextHeader);
 
-        prompt.append("=== SYSTEM LOGIC CONTEXT ===\n");
-        prompt.append("- The system uses a cumulative progression model over the reporting timeline.\n");
-        prompt.append("- 'Period Contribution' is the raw value achieved solely during that specific interval.\n");
-        prompt.append("- 'Cumulative Value To Date' is the running total of all contributions up to that period.\n");
-        prompt.append("- Achievement Rate is calculated against each record's Scaled Period Target below (the Overall Global Target prorated for how far the reporting timeline has progressed) — never against the Overall Global Target directly.\n");
-        prompt.append("- Performance Status (Completed, On Track, At Risk, Overdue) works differently and is given to you pre-computed as \"Current Status\" per record — do not recompute or second-guess it, and never explain it using the Scaled Period Target. Completed means the Overall Global Target has been fully reached; Overdue means the deadline has passed without reaching the Overall Global Target; At Risk means the deadline is within 60 days and cumulative progress is under 50% of the Overall Global Target; On Track covers every other case (active, progressing, time remaining).\n");
-        prompt.append("- These figures represent official FINAL entries approved by the Committee Lead.\n\n");
-
         prompt.append("=== REPORT PARAMETERS ===\n");
-        prompt.append("Reporting Window: ").append(periodFrom).append(" to ").append(periodTo).append("\n\n");
+        prompt.append("Reporting Window: ").append(periodFrom.format(REPORT_DATE_FORMAT))
+                .append(" to ").append(periodTo.format(REPORT_DATE_FORMAT)).append("\n");
+        prompt.append("Report Date (today): ").append(today.format(REPORT_DATE_FORMAT)).append("\n\n");
+
+        prompt.append("=== KPI SUMMARY (as of today, same as the dashboard - use these exact numbers) ===\n");
+        if (kpiSummary.isEmpty()) {
+            prompt.append("No KPIs.\n\n");
+        }
+        for (KpiSummaryRow row : kpiSummary) {
+            prompt.append(String.format(
+                    "- KPI: %s\n" +
+                            "  * Target: %s\n" +
+                            "  * Approved Total to Date: %s\n" +
+                            "  * Achievement Rate: %.1f%%\n" +
+                            "  * Current Status: %s\n" +
+                            "  * Remaining to Target: %s\n" +
+                            "  * Deadline: %s (%s)\n" +
+                            "  * Approved in Reporting Window: %s\n\n",
+                    row.name(),
+                    amount(row.target(), row.unit()),
+                    amount(row.approvedTotal(), row.unit()),
+                    row.achievementRate(),
+                    row.status(),
+                    amount(row.remaining(), row.unit()),
+                    row.deadline().format(REPORT_DATE_FORMAT), daysLabel(row.daysLeft()),
+                    amount(row.approvedInWindow(), row.unit())
+            ));
+        }
 
         // Every organization/submission identity sent to the third-party LLM is pseudonymized per the
         // Data Minimization Policy: organizations become "Org-<id>" (the id is already a non-identifying
         // opaque value, so no separate persisted mapping is needed) and submissions get an ephemeral
         // "REC-N" tag scoped only to this single report generation. Both are resolved back to real
-        // values below, after the LLM responds — the LLM never sees a real org name, and no field
+        // values below, after the LLM responds - the LLM never sees a real org name, and no field
         // outside the permitted list (e.g. Notes) is ever included.
         Map<String, KpiSubmission> tagToSubmission = new LinkedHashMap<>();
         Map<Long, String> orgIdToName = new LinkedHashMap<>();
 
-        prompt.append("=== OFFICIAL KPI SUBMISSION RECORD ===\n");
+        prompt.append("=== OFFICIAL KPI SUBMISSION RECORD (approved submissions in the reporting window) ===\n");
         if (filteredWindowSubmissions.isEmpty()) {
-            prompt.append("No official submissions found within this window.\n");
+            prompt.append("No official submissions found within this window.\n\n");
         } else {
             int tagCounter = 1;
             for (KpiSubmission s : filteredWindowSubmissions) {
                 String recordTag = "REC-" + (tagCounter++);
                 tagToSubmission.put(recordTag, s);
                 orgIdToName.putIfAbsent(s.getOrganization().getId(), s.getOrganization().getName());
-
-                // Extract this organization's historical FINAL submissions for this specific KPI to
-                // calculate its own cumulative progress. A KpiDefinition is shared by every organization
-                // under its committee, so this must also filter by organization — otherwise every
-                // organization's cumulative figure would be pooled together across the whole committee.
-                List<KpiSubmission> kpiHistory = allSubmissions.stream()
-                        .filter(history -> history.getKpiDefinition().getId().equals(s.getKpiDefinition().getId())
-                                && history.getOrganization().getId().equals(s.getOrganization().getId())
-                                && history.getSubmissionType() == SubmissionType.FINAL)
-                        .toList();
-
-                // Pass them into your exact utility class to get the true cumulative state
-                KpiPeriodProgressCalculator.KpiPeriodProgress progress =
-                        KpiPeriodProgressCalculator.calculateExisting(
-                                s.getKpiDefinition(),
-                                s.getReportingPeriod(),
-                                kpiHistory
-                        );
-
-                // Inject the exact calculator outputs into the prompt — organization identity is a
-                // pseudonymous "Org-N" code only; Notes is never included (see class-level note above).
                 prompt.append(String.format(
                         "- Record Tag: %s\n" +
                                 "  * KPI Name: %s\n" +
                                 "  * Organization Reference: Org-%d\n" +
-                                "  * Reporting Period: %s\n" +
-                                "  * Frequency: %s\n" +
-                                "  * Period Contribution (Raw): %.2f %s\n" +
-                                "  * Cumulative Value To Date: %.2f %s\n" +
-                                "  * Cumulative Achievement Rate: %.1f%%\n" +
-                                "  * Current Status: %s\n" +
-                                "  * Scaled Period Target: %.2f | Overall Global Target: %.2f\n" +
+                                "  * Value Submitted: %s\n" +
                                 "  * Submission Date: %s\n\n",
                         recordTag,
                         s.getKpiDefinition().getName(),
                         s.getOrganization().getId(),
-                        s.getReportingPeriod(),
-                        s.getKpiDefinition().getReportingFrequency(),
-                        s.getSubmittedValue(), s.getKpiDefinition().getUnit(),
-                        progress.cumulativeSubmittedValue(), s.getKpiDefinition().getUnit(),
-                        progress.achievementRate(),
-                        toClassifyPerformanceStatus(progress.performanceStatus()),
-                        progress.expectedTarget(),
-                        s.getKpiDefinition().getTargetValue(),
+                        amount(s.getSubmittedValue(), s.getKpiDefinition().getUnit()),
                         s.getSubmissionDate().format(REPORT_DATE_FORMAT)
                 ));
             }
         }
 
-        prompt.append("=== REQUIRED OUTPUT FORMAT (STRICT JSON) ===\n");
-        prompt.append("Respond with a JSON object containing a \"sections\" array of exactly 4 objects, in this exact order, ");
-        prompt.append("each with a \"heading\", a \"text\" (the narrative body), and a \"citedRecordTags\" array:\n");
-        prompt.append("1. heading: \"Overall Performance Summary\" — analyze how the cumulative trajectory is moving across the window. Appreciate steady gains even if temporary periods look low due to contribution dips.\n");
-        prompt.append("2. heading: \"Underperforming KPIs\" — highlight records whose Current Status is Overdue or At Risk.\n");
-        prompt.append("3. heading: \"Major Progress Points\" — point out standout individual period contributions that significantly boosted or recovered the cumulative health status to On Track or Completed.\n");
-        prompt.append("4. heading: \"Recommendations\" — provide tactical recommendations for the incubator to maintain pace or correct courses to hit upcoming scaling milestones.\n\n");
-
-        prompt.append("=== CITATION RULES (STRICT) ===\n");
-        prompt.append("- \"citedRecordTags\" must only contain Record Tags (e.g. \"REC-3\") that appear in the OFFICIAL KPI SUBMISSION RECORD above — never invent a tag.\n");
-        prompt.append("- Cite every Record Tag whose submission materially supports that section's claims; omit tags that aren't relevant to that section.\n");
-        prompt.append("- A section may have an empty \"citedRecordTags\" array if no submission is directly relevant (e.g. Recommendations may be general).\n\n");
-
-        prompt.append("=== DATA CONSISTENCY RULES (STRICT) ===\n");
-        prompt.append("- If an organization or KPI has more than one Record in the window, its 'Period Contribution' for that window is the SUM of all of those Records' raw values. Compute that sum yourself and use it — the same number — every time you state that organization's or KPI's period contribution, in every section and every table of this report.\n");
-        prompt.append("- Never show your arithmetic in the output (e.g. never write \"5 + 10 = 15\" in a table cell or in prose) — state only the final computed number.\n");
-        prompt.append("- In \"Major Progress Points\", if you are highlighting one specific standout Record rather than an organization's/KPI's full summed period contribution, do not label it \"Period Contribution\" — call it out by its own Reporting Period or describe it as a single notable submission, so it is never confused with the summed total used elsewhere.\n\n");
-
-        prompt.append("=== TEXT FORMATTING RULES (apply inside each section's \"text\" field) ===\n");
-        prompt.append("- Write status names in proper title case, exactly as: Completed, On Track, At Risk, Overdue. Never write them in all caps or with underscores (never COMPLETED, ON_TRACK, AT_RISK, OVERDUE). Do not mention GREEN, YELLOW, RED, or color-coded status names, and never use \\\"delayed\\\" as a status — a missed deadline is always Overdue.\n");
-        prompt.append("- Refer to organizations only by their \"Org-N\" reference, written exactly like that — keep the hyphen, e.g. \"Org-3\", never \"Org3\" or \"Org 3\" — and never invent or guess a real organization name.\n");
-        prompt.append("- Only ever write an \"Org-N\" reference where N is the exact Organization Reference of a Record in the OFFICIAL KPI SUBMISSION RECORD above. Never reference an organization that has no Record there, even if you know from context (e.g. committee membership) that it exists — it has nothing to report for this window, so leave it unmentioned rather than citing a made-up reference for it.\n");
-        prompt.append("- Never mention a Record Tag (e.g. \"REC-3\") anywhere inside \"text\" — Record Tags belong ONLY in the \"citedRecordTags\" array. Write the narrative as if the reader cannot see the tags at all.\n");
-        prompt.append("- Do not include markdown headings (#, ##, or numbered headings) inside \"text\" — the heading is already provided as a separate JSON field.\n");
-        prompt.append("- Do NOT use horizontal rule lines (e.g. \"---\" or \"***\") anywhere.\n");
-        prompt.append("- Do NOT escape asterisks with a backslash (never write \"\\*\"); if a line should start with a literal \"-\" or \"*\" character that is not a bullet or emphasis, rephrase it instead.\n");
-        prompt.append("- For any tabular or columnar data (per-KPI breakdowns, comparisons, etc.), you MUST use a proper Markdown pipe table: a header row, then a \"|---|---|\" separator row, then data rows — never align columns with plain spaces.\n");
-        prompt.append("- Use **bold** only to emphasize a handful of key terms or figures, and plain text otherwise. Avoid *italics* unless truly necessary. Never nest bold and italics together.\n");
-        prompt.append("- Keep every hyphen in compound words exactly as written (e.g. \"period-specific\", \"real-time\") — do not drop them.\n");
-        prompt.append("- Write any date you mention in \"Month dd, yyyy\" format (e.g. \"August 01, 2026\", always two-digit day), matching the format already used for Submission Date above — never YYYY-MM-DD.\n");
+        // Each organization's total per KPI for the window, so the AI never has to add records together
+        prompt.append("=== ORGANIZATION CONTRIBUTIONS IN THE REPORTING WINDOW (use these totals) ===\n");
+        Map<Long, Map<Long, Double>> contributions = new LinkedHashMap<>();
+        Map<Long, KpiDefinition> kpisById = new LinkedHashMap<>();
+        for (KpiSubmission s : filteredWindowSubmissions) {
+            kpisById.putIfAbsent(s.getKpiDefinition().getId(), s.getKpiDefinition());
+            contributions.computeIfAbsent(s.getKpiDefinition().getId(), id -> new LinkedHashMap<>())
+                    .merge(s.getOrganization().getId(), s.getSubmittedValue(), Double::sum);
+        }
+        if (contributions.isEmpty()) {
+            prompt.append("None.\n");
+        }
+        contributions.forEach((kpiId, byOrg) -> {
+            KpiDefinition kpi = kpisById.get(kpiId);
+            String orgTotals = byOrg.entrySet().stream()
+                    .map(e -> "Org-" + e.getKey() + ": " + amount(e.getValue(), kpi.getUnit()))
+                    .collect(Collectors.joining("; "));
+            prompt.append("- ").append(kpi.getName()).append(": ").append(orgTotals).append("\n");
+        });
 
         // Call Groq LLM API and parse its structured response
         String narrative = null;
@@ -641,7 +628,14 @@ public class ReportService {
 
         try {
             List<ReportSectionDto> resolvedSections =
-                    generateSections(prompt.toString(), tagToSubmission, orgIdToName);
+                    generateSections(REPORT_RULES, prompt.toString(), tagToSubmission, orgIdToName);
+            // The KPI summary table is built in code and placed at the top of the first section,
+            // so its figures always match the dashboard
+            String summaryTable = buildSummaryTable(kpiSummary, today);
+            if (!summaryTable.isEmpty()) {
+                ReportSectionDto first = resolvedSections.get(0);
+                first.setText(summaryTable + "\n" + first.getText());
+            }
             narrative = flattenSections(resolvedSections);
             sectionsJson = objectMapper.writeValueAsString(resolvedSections);
             status = "GENERATED";
@@ -671,6 +665,160 @@ public class ReportService {
         return mapToResponse(saved);
     }
 
+    /** Fixed report rules, sent as the system message. The report's data goes in the user message. */
+    private static final String REPORT_RULES = """
+            You are a performance analyst writing reports for the DASIG Consortium, a group of technology \
+            business incubators. Your readers are consortium staff, not data analysts.
+
+            === HOW PERFORMANCE IS MEASURED ===
+            - Each KPI has a target and a deadline. Its progress is the total of approved values from all \
+            organizations under the committee.
+            - The KPI SUMMARY gives each KPI's approved total, achievement rate, current status, remaining amount \
+            and days left, calculated by the system exactly as shown on the dashboard. Use these numbers exactly \
+            as given. Never recalculate, re-round or estimate them.
+            - The ORGANIZATION CONTRIBUTIONS block gives each organization's total for the reporting window. Use \
+            those totals; never add record values together yourself.
+            - Status is pre-computed as "Current Status". Never recompute or second-guess it. Meanings:
+              - Completed: the target has been reached.
+              - Overdue: the deadline has passed and the target was not reached.
+              - At Risk: at least 25% of the KPI's timeline (from its creation date to its deadline) has passed, \
+            and its approved progress is below half of the progress expected by now.
+              - On Track: every other case.
+
+            === REQUIRED OUTPUT FORMAT (STRICT JSON) ===
+            Respond with a JSON object containing a "sections" array of exactly 4 objects, in this exact order, \
+            each with a "heading", a "text" (the narrative body), and a "citedRecordTags" array:
+            1. heading: "Overall Performance Summary" - the overall picture: how many KPIs are Completed, On Track, \
+            At Risk and Overdue, and what changed during the reporting window.
+            2. heading: "Underperforming KPIs" - every KPI whose status is At Risk or Overdue, with how much is \
+            still needed to reach its target and how many days are left (or how many days overdue). If there are \
+            none, say so in one sentence.
+            3. heading: "Major Progress Points" - KPIs that are Completed or On Track, and the organizations whose \
+            contributions in the reporting window stood out.
+            4. heading: "Recommendations" - 2 to 4 specific actions. Each must name the KPI and its gap, for \
+            example: "Intellectual Property Filings needs 8.00 more filings in the remaining 30 days." Start with \
+            At Risk and Overdue KPIs.
+
+            === WRITING STYLE ===
+            - Plain, professional English for non-technical readers. Short sentences.
+            - Start each section with one sentence that states its key point.
+            - Keep each section to about 120 words. Use "- " bullet points for lists of KPIs or actions, at most \
+            5 bullets per section.
+            - Never use technical terms such as "scaled target", "cumulative progression", "pace ratio" or \
+            "expected threshold".
+            - Do not write tables. A KPI summary table is added to the report automatically.
+
+            === CITATION RULES (STRICT) ===
+            - "citedRecordTags" must only contain Record Tags (e.g. "REC-3") that appear in the OFFICIAL KPI \
+            SUBMISSION RECORD - never invent a tag.
+            - Cite every Record Tag whose submission supports that section's statements; omit tags that are not \
+            relevant to that section.
+            - A section may have an empty "citedRecordTags" array if no submission is directly relevant.
+
+            === TEXT FORMATTING RULES (apply inside each section's "text" field) ===
+            - Write status names exactly as: Completed, On Track, At Risk, Overdue. Never in all caps or with \
+            underscores. Never use color names or "delayed" as a status - a missed deadline is always Overdue.
+            - Refer to organizations only by their "Org-N" reference, written exactly like that with the hyphen \
+            (e.g. "Org-3"), and never invent or guess a real organization name.
+            - Only write an "Org-N" reference that appears in the OFFICIAL KPI SUBMISSION RECORD or the \
+            ORGANIZATION CONTRIBUTIONS. Never mention an organization that has no record there.
+            - Never mention a Record Tag (e.g. "REC-3") inside "text" - Record Tags belong only in \
+            "citedRecordTags".
+            - Never show arithmetic (e.g. "5 + 10 = 15"); state only the numbers given.
+            - Do not include markdown headings (#, ##, or numbered headings) inside "text".
+            - Do not use horizontal rule lines (e.g. "---" or "***").
+            - Do not escape asterisks with a backslash (never write "\\*").
+            - Use **bold** only for a few key figures or KPI names. Avoid *italics*.
+            - Write any date as "Month dd, yyyy" (e.g. "August 01, 2026"), never YYYY-MM-DD.
+            """;
+
+    /** One KPI's figures, calculated the same way as the dashboard. */
+    private record KpiSummaryRow(
+            String name, String unit, double target, double approvedTotal, double achievementRate,
+            String status, double remaining, LocalDate deadline, long daysLeft, double approvedInWindow) {
+    }
+
+    /**
+     * Same calculation as the Admin dashboard: every FINAL submission of the KPI (all organizations),
+     * the KPI's current reporting period, then KpiPeriodProgressCalculator for total, rate and status.
+     */
+    private List<KpiSummaryRow> buildKpiSummary(
+            List<KpiDefinition> kpis, List<KpiSubmission> allSubmissions, List<KpiSubmission> windowSubmissions,
+            LocalDate today) {
+        List<KpiSummaryRow> rows = new ArrayList<>();
+        for (KpiDefinition kpi : kpis) {
+            if (kpi.getDeadline() == null) {
+                continue;
+            }
+            List<KpiSubmission> finals = allSubmissions.stream()
+                    .filter(s -> s.getKpiDefinition().getId().equals(kpi.getId())
+                            && s.getSubmissionType() == SubmissionType.FINAL)
+                    .toList();
+            LocalDate start = kpi.getDateCreated() != null ? kpi.getDateCreated().toLocalDate() : today;
+            double target = kpi.getTargetValue() != null ? kpi.getTargetValue() : 0.0;
+            String period = ReportingPeriodResolver.resolveCurrentPeriod(
+                    kpi.getReportingFrequency(), kpi.getDeadline(), start, today);
+
+            double total = 0.0;
+            double rate = 0.0;
+            String status;
+            if (period != null) {
+                KpiPeriodProgressCalculator.KpiPeriodProgress progress =
+                        KpiPeriodProgressCalculator.calculateExisting(kpi, period, finals);
+                total = progress.cumulativeSubmittedValue();
+                rate = progress.achievementRate();
+                status = progress.performanceStatus();
+            } else {
+                status = PerformanceStatusClassifier.classify(0.0, target, start, kpi.getDeadline());
+            }
+
+            double inWindow = windowSubmissions.stream()
+                    .filter(s -> s.getKpiDefinition().getId().equals(kpi.getId()))
+                    .mapToDouble(KpiSubmission::getSubmittedValue)
+                    .sum();
+            rows.add(new KpiSummaryRow(
+                    kpi.getName(), kpi.getUnit(), target, total, rate, toClassifyPerformanceStatus(status),
+                    Math.max(target - total, 0.0), kpi.getDeadline(),
+                    ChronoUnit.DAYS.between(today, kpi.getDeadline()), inWindow));
+        }
+        return rows;
+    }
+
+    /** Markdown table of the KPI summary; renders on screen and in the PDF like any other table. */
+    private String buildSummaryTable(List<KpiSummaryRow> rows, LocalDate today) {
+        if (rows.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("**KPI status as of ").append(today.format(REPORT_DATE_FORMAT)).append("**\n\n");
+        sb.append("| KPI | Target | Approved to Date | Achievement | Status | Approved in Period |\n");
+        sb.append("|---|---|---|---|---|---|\n");
+        for (KpiSummaryRow row : rows) {
+            sb.append("| ").append(row.name().replace("|", "/"))
+                    .append(" | ").append(amount(row.target(), row.unit()))
+                    .append(" | ").append(amount(row.approvedTotal(), row.unit()))
+                    .append(" | ").append(String.format("%.1f%%", row.achievementRate()))
+                    .append(" | ").append(row.status())
+                    .append(" | ").append(amount(row.approvedInWindow(), row.unit()))
+                    .append(" |\n");
+        }
+        return sb.toString();
+    }
+
+    private static String amount(Double value, String unit) {
+        double number = value != null ? value : 0.0;
+        return (String.format("%.2f", number) + " " + (unit != null ? unit : "")).trim();
+    }
+
+    private static String daysLabel(long daysLeft) {
+        if (daysLeft == 0) {
+            return "due today";
+        }
+        long days = Math.abs(daysLeft);
+        String unit = days == 1 ? " day" : " days";
+        return daysLeft > 0 ? days + unit + " left" : days + unit + " overdue";
+    }
+
     private static final int EXPECTED_SECTION_COUNT = 4;
     private static final long RETRY_BACKOFF_MS = 2000;
 
@@ -680,17 +828,17 @@ public class ReportService {
      * - Retries once (inside callWithRetry) on rate limit / service unavailable.
      */
     private List<ReportSectionDto> generateSections(
-            String prompt, Map<String, KpiSubmission> tagToSubmission, Map<Long, String> orgIdToName) {
+            String systemPrompt, String prompt, Map<String, KpiSubmission> tagToSubmission, Map<Long, String> orgIdToName) {
         LlmReportPayload payload;
         try {
-            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReport(prompt)));
+            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReport(systemPrompt, prompt)));
         } catch (LLMException e) {
             if (e.getReason() != LLMException.Reason.SCHEMA_REJECTED
                     && e.getReason() != LLMException.Reason.INVALID_RESPONSE) {
                 throw e;
             }
             log.warn("Strict json_schema mode failed [{}], retrying in json_object mode", e.getReason());
-            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReportAsJsonObject(prompt)));
+            payload = parsePayload(callWithRetry(() -> llmApiClient.generateReportAsJsonObject(systemPrompt, prompt)));
         }
 
         validatePayload(payload);
